@@ -38,13 +38,13 @@ DAILY_FREE_LIMIT = 10
 # --- អនុគមន៍បង្កើត ប៊ូតុងជ្រើសរើសកញ្ចប់ (Inline Keyboard) ---
 def get_package_keyboard():
     markup = InlineKeyboardMarkup(row_width=2)
-    btn1 = InlineKeyboardButton("🥉 $0.10 (30 រូប)", callback_data="pkg_0.10_30")
-    btn2 = InlineKeyboardButton("🥈 $0.20 (60 រូប)", callback_data="pkg_0.20_60")
-    btn3 = InlineKeyboardButton("🥇 $0.50 (200 រូប)", callback_data="pkg_0.50_200")
-    btn4 = InlineKeyboardButton("💎 $1.00 (500 រូប)", callback_data="pkg_1.00_500")
-    btn5 = InlineKeyboardButton("🚀 $2.00 (1100 រូប)", callback_data="pkg_2.00_1100")
-    btn6 = InlineKeyboardButton("👑 $5.00 (3000 រូប)", callback_data="pkg_5.00_3000")
-    btn7 = InlineKeyboardButton("🔥 $10.00 (7000 រូប)", callback_data="pkg_10.00_7000")
+    btn1 = InlineKeyboardButton("🥉 $0.10 (410៛) - 30រូប", callback_data="pkg_0.10_30")
+    btn2 = InlineKeyboardButton("🥈 $0.20 (820៛) - 60រូប", callback_data="pkg_0.20_60")
+    btn3 = InlineKeyboardButton("🥇 $0.50 (2,050៛) - 200រូប", callback_data="pkg_0.50_200")
+    btn4 = InlineKeyboardButton("💎 $1.00 (4,100៛) - 500រូប", callback_data="pkg_1.00_500")
+    btn5 = InlineKeyboardButton("🚀 $2.00 (8,200៛) - 1,100រូប", callback_data="pkg_2.00_1100")
+    btn6 = InlineKeyboardButton("👑 $5.00 (20,500៛) - 3,000រូប", callback_data="pkg_5.00_3000")
+    btn7 = InlineKeyboardButton("🔥 $10.00 (41,000៛) - 7,000រូប", callback_data="pkg_10.00_7000")
     
     markup.add(btn1, btn2)
     markup.add(btn3, btn4)
@@ -65,27 +65,28 @@ def send_welcome(message):
 # --- Catch ការចុចប៊ូតុងកញ្ចប់ (Callback Query) ---
 @bot.callback_query_handler(func=lambda call: call.data.startswith('pkg_'))
 def handle_package_selection(call):
-    # បំបែកទិន្នន័យពី callback_data
     _, price, amount = call.data.split('_')
     user_id = call.from_user.id
+    price_usd = float(price)
+    price_khr = int(price_usd * 4100)
 
     payment_info = (
-        f"✅ **អ្នកបានជ្រើសរើសកញ្ចប់តម្លៃ ៖ ${price} ({amount} រូប)**\n\n"
-        f"💳 **ព័ត៌មានទូទាត់ប្រាក់ ABA ៖**\n"
-        f"• លេខគណនី ៖ `000 743 463`\n"
-        f"• ឈ្មោះ ៖ **POV VANNAK**\n"
-        f"• ចំនួនទឹកប្រាក់ ៖ **${price}**\n\n"
+        f"✅ **អ្នកបានជ្រើសរើសកញ្ចប់ ៖ ${price_usd:.2f} / {price_khr:,} ៛ ({amount} រូប)**\n\n"
+        f"💳 **ព័ត៌មានទូទាត់ប្រាក់ ABA (POV VANNAK) ៖**\n"
+        f"• **គណនីប្រាក់ដុល្លារ ($) ៖** `003 345 485` (${price_usd:.2f})\n"
+        f"• **គណនីប្រាក់រៀល (៛) ៖** `600 272 171` ({price_khr:,} ៛)\n"
+        f"• **អត្រាប្តូរប្រាក់ ៖** $1.00 = 4,100 ៛\n\n"
         f"🆔 **User ID របស់អ្នក ៖** `{user_id}` *(សូម Copy លេខនេះ)*\n\n"
         f"📲 **ជំហានបន្ទាប់ ៖** បាញ់ប្រាក់រួច សូមផ្ញើ **រូបភាពវិក្កយបត្រ (Receipt)** + **User ID** ទៅកាន់ Admin ដើម្បីបើកកញ្ចប់!"
     )
 
-    # បង្កើតប៊ូតុងចុចទៅកាន់ Admin ផ្ទាល់
     admin_markup = InlineKeyboardMarkup()
     btn_admin = InlineKeyboardButton("📩 ផ្ញើវិក្កយបត្រទៅ Admin", url="https://t.me/PovVannak168")
     admin_markup.add(btn_admin)
 
     bot.send_message(call.message.chat.id, payment_info, reply_markup=admin_markup, parse_mode="Markdown")
 
+# --- Command បន្ថែម Quota និងផ្ញើសារអរគុណ ---
 @bot.message_handler(commands=['add'])
 def add_extra_quota(message):
     if message.from_user.id != ADMIN_ID:
@@ -104,10 +105,10 @@ def add_extra_quota(message):
         user_data[target_user_id]["extra"] += amount
         bot.reply_to(message, f"✅ បានបន្ថែម {amount} រូបជូន User ID: `{target_user_id}` រួចរាល់!", parse_mode="Markdown")
         
-        # សារអរគុណស្វ័យប្រវត្តិ
+        # សារអរគុណដែលបានកែសម្រួល
         thank_you_msg = (
             f"🎉 **ការទូទាត់ទទួលបានជោគជ័យ!**\n\n"
-            f"អរគុណច្រើនសម្រាប់ការគាំទ្រសេវាកម្មរបស់យើង! 🙏✨\n"
+            f"សូមអរគុណដែលបានជ្រើសរើសសេវាកម្មយើងខ្ញុំ! 🙏✨\n"
             f"អ្នកទទួលបានសិទ្ធិបំប្លែងរូបភាព **{amount} រូបបន្ថែម** រួចរាល់ហើយ!\n\n"
             f"សូមផ្ញើរូបភាពមកកាន់ Bot ដើម្បីបំប្លែងបានភ្លាមៗ! 📄"
         )
@@ -151,7 +152,6 @@ def handle_photo_or_document(message):
     total_allowed = DAILY_FREE_LIMIT + user_data[user_id]["extra"]
     used_count = user_data[user_id]["used"]
 
-    # ពេលអស់ក្រេឌីត ➡️ បោះ Message ប្រាប់ និងលោតប៊ូតុងកញ្ចប់ឱ្យរើស!
     if used_count >= total_allowed:
         limit_msg = (
             f"⚠️ **អ្នកបានប្រើប្រាស់អស់កំណត់ {total_allowed} រូបសម្រាប់ថ្ងៃនេះហើយ!**\n\n"
