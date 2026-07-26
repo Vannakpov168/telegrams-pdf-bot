@@ -6,12 +6,18 @@ import os
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
-# --- ១. បង្កើត Web Server តូចមួយដើម្បីឱ្យ Render ស្គាល់ (Free Tier) ---
+# --- ១. បង្កើត Web Server តូចមួយដើម្បីឱ្យ Render ស្គាល់ ( Free Tier + គាំទ្រ HEAD/GET ) ---
 class DummyServer(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
+        self.send_header("Content-type", "text/html")
         self.end_headers()
         self.wfile.write(b"Bot is running!")
+
+    def do_HEAD(self):
+        self.send_response(200)
+        self.send_header("Content-type", "text/html")
+        self.end_headers()
 
 def run_http_server():
     port = int(os.environ.get("PORT", 8080))
