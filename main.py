@@ -38,7 +38,7 @@ DAILY_FREE_LIMIT = 10
 def send_welcome(message):
     bot.reply_to(
         message, 
-        f"ជំរាបសួរ! 📊\nសូមផ្ញើរូបថតមក ខ្ញុំនឹងបំប្លែងវាទៅជា PDF ជូន។\n\n"
+        f"ជំរាបសួរ! 📊\nសូមផ្ញើរូបថតមក ខ្ញុំនឹងបម្លែងវាទៅជា PDF ជូន។\n\n"
         f"💡 **ទន្លឺ៖** ប្រសិនបើផ្ញើជា **File/Document** ឬដាក់ **Caption** នោះ Bot នឹងរក្សាឈ្មោះ File ដើមជូន!\n\n"
         f"🎁 ឥតគិតថ្លៃ៖ {DAILY_FREE_LIMIT} រូប/ថ្ងៃ\n"
         f"💳 បន្ថែម៖ បាញ់ប្រាក់ $0.01 ដើម្បីទទួលបាន ៣០ រូបបន្ថែម!"
@@ -146,7 +146,7 @@ def handle_photo_or_document(message):
             caption=f"នេះជាឯកសារ PDF របស់អ្នក! 📄\n\n*(អាចប្រើបាន {remaining} រូបទៀតសម្រាប់ថ្ងៃនេះ)*"
         )
     except Exception as e:
-        bot.reply_to(message, f"មានបញ្ហាក្នុងការបំប្លែង៖ {e}")
+        bot.reply_to(message, f"មានបញ្ហាក្នុងការបម្លែង៖ {e}")
 
 print("Bot កំពុងដំណើរការ...")
 bot.polling()
