@@ -35,16 +35,16 @@ bot = telebot.TeleBot(TOKEN)
 user_data = {}
 DAILY_FREE_LIMIT = 10
 
-# --- អនុគមន៍បង្កើត ប៊ូតុងជ្រើសរើសកញ្ចប់ (Inline Keyboard) ---
+# --- អនុគមន៍បង្កើត ប៊ូតុងជ្រើសរើសកញ្ចប់ (លុបរង្វង់ក្រចកចេញ ឱ្យមើលទៅស្អាត) ---
 def get_package_keyboard():
     markup = InlineKeyboardMarkup(row_width=2)
-    btn1 = InlineKeyboardButton("🥉 $0.10 (410៛) - 30រូប", callback_data="pkg_0.10_30")
-    btn2 = InlineKeyboardButton("🥈 $0.20 (820៛) - 60រូប", callback_data="pkg_0.20_60")
-    btn3 = InlineKeyboardButton("🥇 $0.50 (2,050៛) - 200រូប", callback_data="pkg_0.50_200")
-    btn4 = InlineKeyboardButton("💎 $1.00 (4,100៛) - 500រូប", callback_data="pkg_1.00_500")
-    btn5 = InlineKeyboardButton("🚀 $2.00 (8,200៛) - 1,100រូប", callback_data="pkg_2.00_1100")
-    btn6 = InlineKeyboardButton("👑 $5.00 (20,500៛) - 3,000រូប", callback_data="pkg_5.00_3000")
-    btn7 = InlineKeyboardButton("🔥 $10.00 (41,000៛) - 7,000រូប", callback_data="pkg_10.00_7000")
+    btn1 = InlineKeyboardButton("🥉 $0.10 - 30 រូប", callback_data="pkg_0.10_30")
+    btn2 = InlineKeyboardButton("🥈 $0.20 - 60 រូប", callback_data="pkg_0.20_60")
+    btn3 = InlineKeyboardButton("🥇 $0.50 - 200 រូប", callback_data="pkg_0.50_200")
+    btn4 = InlineKeyboardButton("💎 $1.00 - 500 រូប", callback_data="pkg_1.00_500")
+    btn5 = InlineKeyboardButton("🚀 $2.00 - 1,100 រូប", callback_data="pkg_2.00_1100")
+    btn6 = InlineKeyboardButton("👑 $5.00 - 3,000 រូប", callback_data="pkg_5.00_3000")
+    btn7 = InlineKeyboardButton("🔥 $10.00 - 7,000 រូប", callback_data="pkg_10.00_7000")
     
     markup.add(btn1, btn2)
     markup.add(btn3, btn4)
@@ -84,7 +84,6 @@ def handle_package_selection(call):
     btn_admin = InlineKeyboardButton("📩 ផ្ញើវិក្កយបត្រទៅ Admin", url="https://t.me/PovVannak168")
     admin_markup.add(btn_admin)
 
-    # ផ្ញើរូប KHQR ទៅកាន់ User
     try:
         if os.path.exists('qr.jpg'):
             with open('qr.jpg', 'rb') as qr_photo:
