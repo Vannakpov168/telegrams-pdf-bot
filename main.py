@@ -62,7 +62,7 @@ def send_welcome(message):
     )
     bot.reply_to(message, welcome_text, reply_markup=get_package_keyboard(), parse_mode="Markdown")
 
-# --- Catch ការចុចប៊ូតុងកញ្ចប់ (Callback Query) ---
+# --- Catch ការចុចប៊ូតុងកញ្ចប់ (បាញ់រូប KHQR ជូន User) ---
 @bot.callback_query_handler(func=lambda call: call.data.startswith('pkg_'))
 def handle_package_selection(call):
     _, price, amount = call.data.split('_')
@@ -72,19 +72,27 @@ def handle_package_selection(call):
 
     payment_info = (
         f"✅ **អ្នកបានជ្រើសរើសកញ្ចប់ ៖ ${price_usd:.2f} / {price_khr:,} ៛ ({amount} រូប)**\n\n"
-        f"💳 **ព័ត៌មានទូទាត់ប្រាក់ ABA (POV VANNAK) ៖**\n"
-        f"• **គណនីប្រាក់ដុល្លារ ($) ៖** `003 345 485` (${price_usd:.2f})\n"
-        f"• **គណនីប្រាក់រៀល (៛) ៖** `600 272 171` ({price_khr:,} ៛)\n"
-        f"• **អត្រាប្តូរប្រាក់ ៖** $1.00 = 4,100 ៛\n\n"
+        f"📲 **សូមស្កែន QR Code ខាងលើដើម្បីទូទាត់ប្រាក់ ៖**\n"
+        f"• **ABA ដុល្លារ ($) ៖** `003 345 485` (${price_usd:.2f})\n"
+        f"• **ABA រៀល (៛) ៖** `600 272 171` ({price_khr:,} ៛)\n"
+        f"• **ឈ្មោះ ៖** POV VANNAK\n\n"
         f"🆔 **User ID របស់អ្នក ៖** `{user_id}` *(សូម Copy លេខនេះ)*\n\n"
-        f"📲 **ជំហានបន្ទាប់ ៖** បាញ់ប្រាក់រួច សូមផ្ញើ **រូបភាពវិក្កយបត្រ (Receipt)** + **User ID** ទៅកាន់ Admin ដើម្បីបើកកញ្ចប់!"
+        f"📩 បាញ់ប្រាក់រួច សូមផ្ញើ **រូបភាពវិក្កយបត្រ (Receipt)** + **User ID** មកកាន់ Admin ដើម្បីបើកកញ្ចប់!"
     )
 
     admin_markup = InlineKeyboardMarkup()
     btn_admin = InlineKeyboardButton("📩 ផ្ញើវិក្កយបត្រទៅ Admin", url="https://t.me/PovVannak168")
     admin_markup.add(btn_admin)
 
-    bot.send_message(call.message.chat.id, payment_info, reply_markup=admin_markup, parse_mode="Markdown")
+    # ផ្ញើរូប KHQR ទៅកាន់ User
+    try:
+        if os.path.exists('qr.jpg'):
+            with open('qr.jpg', 'rb') as qr_photo:
+                bot.send_photo(call.message.chat.id, photo=qr_photo, caption=payment_info, reply_markup=admin_markup, parse_mode="Markdown")
+        else:
+            bot.send_message(call.message.chat.id, payment_info, reply_markup=admin_markup, parse_mode="Markdown")
+    except Exception as e:
+        bot.send_message(call.message.chat.id, payment_info, reply_markup=admin_markup, parse_mode="Markdown")
 
 # --- Command បន្ថែម Quota និងផ្ញើសារអរគុណ ---
 @bot.message_handler(commands=['add'])
@@ -105,7 +113,6 @@ def add_extra_quota(message):
         user_data[target_user_id]["extra"] += amount
         bot.reply_to(message, f"✅ បានបន្ថែម {amount} រូបជូន User ID: `{target_user_id}` រួចរាល់!", parse_mode="Markdown")
         
-        # សារអរគុណដែលបានកែសម្រួល
         thank_you_msg = (
             f"🎉 **ការទូទាត់ទទួលបានជោគជ័យ!**\n\n"
             f"សូមអរគុណដែលបានជ្រើសរើសសេវាកម្មយើងខ្ញុំ! 🙏✨\n"
