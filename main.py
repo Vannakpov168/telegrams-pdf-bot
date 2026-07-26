@@ -1,4 +1,5 @@
 import telebot
+from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 from PIL import Image
 import io
 from datetime import date
@@ -34,15 +35,56 @@ bot = telebot.TeleBot(TOKEN)
 user_data = {}
 DAILY_FREE_LIMIT = 10
 
+# --- អនុគមន៍បង្កើត ប៊ូតុងជ្រើសរើសកញ្ចប់ (Inline Keyboard) ---
+def get_package_keyboard():
+    markup = InlineKeyboardMarkup(row_width=2)
+    btn1 = InlineKeyboardButton("🥉 $0.10 (30 រូប)", callback_data="pkg_0.10_30")
+    btn2 = InlineKeyboardButton("🥈 $0.20 (60 រូប)", callback_data="pkg_0.20_60")
+    btn3 = InlineKeyboardButton("🥇 $0.50 (200 រូប)", callback_data="pkg_0.50_200")
+    btn4 = InlineKeyboardButton("💎 $1.00 (500 រូប)", callback_data="pkg_1.00_500")
+    btn5 = InlineKeyboardButton("🚀 $2.00 (1100 រូប)", callback_data="pkg_2.00_1100")
+    btn6 = InlineKeyboardButton("👑 $5.00 (3000 រូប)", callback_data="pkg_5.00_3000")
+    btn7 = InlineKeyboardButton("🔥 $10.00 (7000 រូប)", callback_data="pkg_10.00_7000")
+    
+    markup.add(btn1, btn2)
+    markup.add(btn3, btn4)
+    markup.add(btn5, btn6)
+    markup.add(btn7)
+    return markup
+
 @bot.message_handler(commands=['start', 'help'])
 def send_welcome(message):
-    bot.reply_to(
-        message, 
-        f"ជំរាបសួរ! 📊\nសូមផ្ញើរូបថតមក ខ្ញុំនឹងបម្លែងវាទៅជា PDF ជូន។\n\n"
-        f"💡 **ទន្លឺ៖** ប្រសិនបើផ្ញើជា **File/Document** ឬដាក់ **Caption** នោះ Bot នឹងរក្សាឈ្មោះ File ដើមជូន!\n\n"
-        f"🎁 ឥតគិតថ្លៃ៖ {DAILY_FREE_LIMIT} រូប/ថ្ងៃ\n"
-        f"💳 បន្ថែម៖ បាញ់ប្រាក់ $0.01 ដើម្បីទទួលបាន ៣០ រូបបន្ថែម!"
+    welcome_text = (
+        f"ជំរាបសួរ! 📊\nសូមផ្ញើរូបថតមក ខ្ញុំនឹងបំប្លែងវាទៅជា PDF ជូន។\n\n"
+        f"🎁 **ឥតគិតថ្លៃ ៖** {DAILY_FREE_LIMIT} រូប/ថ្ងៃ\n"
+        f"💡 **ទន្លឺ ៖** ផ្ញើជា File/Document ឬដាក់ Caption ដើម្បីរក្សាឈ្មោះ File ដើម!\n\n"
+        f"👇 **ប្រសិនបើចង់ទិញកូតបន្ថែម សូមជ្រើសរើសកញ្ចប់ខាងក្រោម ៖**"
     )
+    bot.reply_to(message, welcome_text, reply_markup=get_package_keyboard(), parse_mode="Markdown")
+
+# --- Catch ការចុចប៊ូតុងកញ្ចប់ (Callback Query) ---
+@bot.callback_query_handler(func=lambda call: call.data.startswith('pkg_'))
+def handle_package_selection(call):
+    # បំបែកទិន្នន័យពី callback_data
+    _, price, amount = call.data.split('_')
+    user_id = call.from_user.id
+
+    payment_info = (
+        f"✅ **អ្នកបានជ្រើសរើសកញ្ចប់តម្លៃ ៖ ${price} ({amount} រូប)**\n\n"
+        f"💳 **ព័ត៌មានទូទាត់ប្រាក់ ABA ៖**\n"
+        f"• លេខគណនី ៖ `000 743 463`\n"
+        f"• ឈ្មោះ ៖ **POV VANNAK**\n"
+        f"• ចំនួនទឹកប្រាក់ ៖ **${price}**\n\n"
+        f"🆔 **User ID របស់អ្នក ៖** `{user_id}` *(សូម Copy លេខនេះ)*\n\n"
+        f"📲 **ជំហានបន្ទាប់ ៖** បាញ់ប្រាក់រួច សូមផ្ញើ **រូបភាពវិក្កយបត្រ (Receipt)** + **User ID** ទៅកាន់ Admin ដើម្បីបើកកញ្ចប់!"
+    )
+
+    # បង្កើតប៊ូតុងចុចទៅកាន់ Admin ផ្ទាល់
+    admin_markup = InlineKeyboardMarkup()
+    btn_admin = InlineKeyboardButton("📩 ផ្ញើវិក្កយបត្រទៅ Admin", url="https://t.me/PovVannak168")
+    admin_markup.add(btn_admin)
+
+    bot.send_message(call.message.chat.id, payment_info, reply_markup=admin_markup, parse_mode="Markdown")
 
 @bot.message_handler(commands=['add'])
 def add_extra_quota(message):
@@ -53,35 +95,37 @@ def add_extra_quota(message):
     try:
         args = message.text.split()
         target_user_id = int(args[1])
+        amount = int(args[2]) if len(args) > 2 else 30
         today = str(date.today())
 
         if target_user_id not in user_data or user_data[target_user_id]["date"] != today:
             user_data[target_user_id] = {"date": today, "used": 0, "extra": 0}
 
-        user_data[target_user_id]["extra"] += 30
-        bot.reply_to(message, f"✅ បានបន្ថែម ៣០ រូបជូន User ID: `{target_user_id}` រួចរាល់!", parse_mode="Markdown")
+        user_data[target_user_id]["extra"] += amount
+        bot.reply_to(message, f"✅ បានបន្ថែម {amount} រូបជូន User ID: `{target_user_id}` រួចរាល់!", parse_mode="Markdown")
         
-        bot.send_message(
-            target_user_id, 
-            "🎉 **ការទូទាត់ទទួលបានជោគជ័យ!**\nអ្នកទទួលបានសិទ្ធិបំប្លែងរូបភាព **៣០ រូបបន្ថែម** សម្រាប់ថ្ងៃនេះ!"
+        # សារអរគុណស្វ័យប្រវត្តិ
+        thank_you_msg = (
+            f"🎉 **ការទូទាត់ទទួលបានជោគជ័យ!**\n\n"
+            f"អរគុណច្រើនសម្រាប់ការគាំទ្រសេវាកម្មរបស់យើង! 🙏✨\n"
+            f"អ្នកទទួលបានសិទ្ធិបំប្លែងរូបភាព **{amount} រូបបន្ថែម** រួចរាល់ហើយ!\n\n"
+            f"សូមផ្ញើរូបភាពមកកាន់ Bot ដើម្បីបំប្លែងបានភ្លាមៗ! 📄"
         )
+        bot.send_message(target_user_id, thank_you_msg, parse_mode="Markdown")
     except Exception as e:
-        bot.reply_to(message, "❌ ទម្រង់មិនត្រឹមត្រូវ! សូមវាយ៖ `/add USER_ID` (ឧទាហរណ៍៖ `/add 12345678`)")
+        bot.reply_to(message, "❌ ទម្រង់មិនត្រឹមត្រូវ! សូមវាយ៖ `/add USER_ID ចំនួនរូប`\nឧទាហរណ៍៖ `/add 12345678 500`", parse_mode="Markdown")
 
-# --- ៣. អនុគមន៍បំប្លែងរូបភាព (គាំទ្រទាំង Photo និង Document/File) ---
 @bot.message_handler(content_types=['photo', 'document'])
 def handle_photo_or_document(message):
     user_id = message.from_user.id
     today = str(date.today())
 
-    # ឆែកមើលប្រភេទ File និងចាប់យកឈ្មោះ File ដើម
     file_id = None
     pdf_filename = "photo_to_pdf.pdf"
 
     if message.photo:
         file_id = message.photo[-1].file_id
         if message.caption:
-            # ប្រសិនបើមាន Caption យក Caption ធ្វើជាឈ្មោះ File
             clean_name = "".join(c for c in message.caption if c.isalnum() or c in (' ', '_', '-')).strip()
             if clean_name:
                 pdf_filename = f"{clean_name}.pdf"
@@ -95,30 +139,25 @@ def handle_photo_or_document(message):
             base_name = os.path.splitext(doc_name)[0]
             pdf_filename = f"{base_name}.pdf"
         else:
-            # បើមិនមែនជារូបភាព មិនបំប្លែងទេ
             bot.reply_to(message, "❌ សូមផ្ញើតែរូបភាព (JPG, PNG, WEBP, ...) ប៉ុណ្ណោះ!")
             return
 
     if not file_id:
         return
 
-    # ឆែក Quota ប្រចាំថ្ងៃ
     if user_id not in user_data or user_data[user_id]["date"] != today:
         user_data[user_id] = {"date": today, "used": 0, "extra": 0}
 
     total_allowed = DAILY_FREE_LIMIT + user_data[user_id]["extra"]
     used_count = user_data[user_id]["used"]
 
+    # ពេលអស់ក្រេឌីត ➡️ បោះ Message ប្រាប់ និងលោតប៊ូតុងកញ្ចប់ឱ្យរើស!
     if used_count >= total_allowed:
-        payment_info = (
-            f"❌ **អ្នកបានប្រើប្រាស់អស់កំណត់ {total_allowed} រូបសម្រាប់ថ្ងៃនេះហើយ!**\n\n"
-            f"💳 **ចង់បំប្លែងបន្ថែម (៣០ រូបទៀត) ៖**\n"
-            f"1. បាញ់ប្រាក់ចំនួន **$0.01** មកកាន់ ABA ៖ `000 743 463` (POV Vannak)\n"
-            f"2. ផ្ញើវិក្កយបត្រ (Receipt) មកកាន់ Admin ៖ @PovVannak168\n"
-            f"3. ភ្ជាប់ជាមួយ **User ID របស់អ្នក** ៖ `{user_id}`\n\n"
-            f"*(បន្ទាប់ពីផ្ទៀងផ្ទាត់រួច Admin នឹងបន្ថែម ៣០ រូបជូនភ្លាមៗ!)*"
+        limit_msg = (
+            f"⚠️ **អ្នកបានប្រើប្រាស់អស់កំណត់ {total_allowed} រូបសម្រាប់ថ្ងៃនេះហើយ!**\n\n"
+            f"សូមជ្រើសរើសកញ្ចប់ខាងក្រោម ដើម្បីទិញកូតបន្ថែម ៖"
         )
-        bot.reply_to(message, payment_info, parse_mode="Markdown")
+        bot.reply_to(message, limit_msg, reply_markup=get_package_keyboard(), parse_mode="Markdown")
         return
 
     try:
@@ -146,7 +185,7 @@ def handle_photo_or_document(message):
             caption=f"នេះជាឯកសារ PDF របស់អ្នក! 📄\n\n*(អាចប្រើបាន {remaining} រូបទៀតសម្រាប់ថ្ងៃនេះ)*"
         )
     except Exception as e:
-        bot.reply_to(message, f"មានបញ្ហាក្នុងការបម្លែង៖ {e}")
+        bot.reply_to(message, f"មានបញ្ហាក្នុងការបំប្លែង៖ {e}")
 
 print("Bot កំពុងដំណើរការ...")
 bot.polling()
