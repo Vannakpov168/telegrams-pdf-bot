@@ -6,7 +6,7 @@ import os
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
-# --- ១. បង្កើត Web Server តូចមួយដើម្បីឱ្យ Render ស្គាល់ ( Free Tier + គាំទ្រ HEAD/GET ) ---
+# --- ១. Web Server សម្រាប់ Render + UptimeRobot (Free Tier) ---
 class DummyServer(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -24,10 +24,9 @@ def run_http_server():
     server = HTTPServer(('0.0.0.0', port), DummyServer)
     server.serve_forever()
 
-# រត់ Web Server ក្នុង Background
 threading.Thread(target=run_http_server, daemon=True).start()
 
-# --- ២. កូដ Telegram Bot របស់អ្នក ---
+# --- ២. Telegram Bot Configuration ---
 TOKEN = '8758108648:AAEiPmCO15tKVdg5qw7s0Ueh5vUjIDDF9So'
 ADMIN_ID = 567818061
 
@@ -40,6 +39,7 @@ def send_welcome(message):
     bot.reply_to(
         message, 
         f"ជំរាបសួរ! 📊\nសូមផ្ញើរូបថតមក ខ្ញុំនឹងបំប្លែងវាទៅជា PDF ជូន។\n\n"
+        f"💡 **ទន្លឺ៖** ប្រសិនបើផ្ញើជា **File/Document** ឬដាក់ **Caption** នោះ Bot នឹងរក្សាឈ្មោះ File ដើមជូន!\n\n"
         f"🎁 ឥតគិតថ្លៃ៖ {DAILY_FREE_LIMIT} រូប/ថ្ងៃ\n"
         f"💳 បន្ថែម៖ បាញ់ប្រាក់ $0.01 ដើម្បីទទួលបាន ៣០ រូបបន្ថែម!"
     )
@@ -68,11 +68,41 @@ def add_extra_quota(message):
     except Exception as e:
         bot.reply_to(message, "❌ ទម្រង់មិនត្រឹមត្រូវ! សូមវាយ៖ `/add USER_ID` (ឧទាហរណ៍៖ `/add 12345678`)")
 
-@bot.message_handler(content_types=['photo'])
-def handle_photo(message):
+# --- ៣. អនុគមន៍បំប្លែងរូបភាព (គាំទ្រទាំង Photo និង Document/File) ---
+@bot.message_handler(content_types=['photo', 'document'])
+def handle_photo_or_document(message):
     user_id = message.from_user.id
     today = str(date.today())
 
+    # ឆែកមើលប្រភេទ File និងចាប់យកឈ្មោះ File ដើម
+    file_id = None
+    pdf_filename = "photo_to_pdf.pdf"
+
+    if message.photo:
+        file_id = message.photo[-1].file_id
+        if message.caption:
+            # ប្រសិនបើមាន Caption យក Caption ធ្វើជាឈ្មោះ File
+            clean_name = "".join(c for c in message.caption if c.isalnum() or c in (' ', '_', '-')).strip()
+            if clean_name:
+                pdf_filename = f"{clean_name}.pdf"
+    elif message.document:
+        mime = message.document.mime_type or ""
+        doc_name = message.document.file_name or ""
+        valid_exts = ('.jpg', '.jpeg', '.png', '.webp', '.bmp', '.tiff')
+        
+        if mime.startswith('image/') or doc_name.lower().endswith(valid_exts):
+            file_id = message.document.file_id
+            base_name = os.path.splitext(doc_name)[0]
+            pdf_filename = f"{base_name}.pdf"
+        else:
+            # បើមិនមែនជារូបភាព មិនបំប្លែងទេ
+            bot.reply_to(message, "❌ សូមផ្ញើតែរូបភាព (JPG, PNG, WEBP, ...) ប៉ុណ្ណោះ!")
+            return
+
+    if not file_id:
+        return
+
+    # ឆែក Quota ប្រចាំថ្ងៃ
     if user_id not in user_data or user_data[user_id]["date"] != today:
         user_data[user_id] = {"date": today, "used": 0, "extra": 0}
 
@@ -92,9 +122,9 @@ def handle_photo(message):
         return
 
     try:
-        bot.reply_to(message, f"កំពុងបំប្លែងរូបភាព... ⏳ ({used_count + 1}/{total_allowed})")
+        bot.reply_to(message, f"កំពុងបំប្លែង `{pdf_filename}`... ⏳ ({used_count + 1}/{total_allowed})", parse_mode="Markdown")
 
-        file_info = bot.get_file(message.photo[-1].file_id)
+        file_info = bot.get_file(file_id)
         downloaded_file = bot.download_file(file_info.file_path)
 
         image = Image.open(io.BytesIO(downloaded_file))
@@ -112,7 +142,7 @@ def handle_photo(message):
         bot.send_document(
             message.chat.id, 
             pdf_bytes, 
-            visible_file_name="photo_to_pdf.pdf",
+            visible_file_name=pdf_filename,
             caption=f"នេះជាឯកសារ PDF របស់អ្នក! 📄\n\n*(អាចប្រើបាន {remaining} រូបទៀតសម្រាប់ថ្ងៃនេះ)*"
         )
     except Exception as e:
