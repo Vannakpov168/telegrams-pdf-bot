@@ -27,16 +27,16 @@ def run_http_server():
 
 threading.Thread(target=run_http_server, daemon=True).start()
 
-# --- ២. Telegram Bot Configuration (បន្ថែម Timeout វែងជាងមុន) ---
+# --- ២. Telegram Bot Configuration ---
 TOKEN = '8758108648:AAEiPmCO15tKVdg5qw7s0Ueh5vUjIDDF9So'
 ADMIN_ID = 567818061
 
 bot = telebot.TeleBot(TOKEN)
-user_data = {}
-user_sessions = {}
+user_data = {}      # រក្សាទុកចំនួនរូបភាពដែលប្រើយោគ
+user_sessions = {}  # រក្សារូបភាពសម្រាប់ Combine
 DAILY_FREE_LIMIT = 10
 
-# --- អនុគមន៍បង្កើត ប៊ូតុងជ្រើសរើសកញ្ចប់ ---
+# --- ប៊ូតុងជ្រើសរើសកញ្ចប់ ---
 def get_package_keyboard():
     markup = InlineKeyboardMarkup(row_width=2)
     btn1 = InlineKeyboardButton("🥉 $0.10 - 30 រូប", callback_data="pkg_0.10_30")
@@ -53,10 +53,10 @@ def get_package_keyboard():
     markup.add(btn7)
     return markup
 
-# --- អនុគមន៍បង្កើត ប៊ូតុង Combine រូបភាព ---
+# --- ប៊ូតុង Combine ---
 def get_combine_keyboard(count):
     markup = InlineKeyboardMarkup(row_width=2)
-    btn_done = InlineKeyboardButton(f"📥 បញ្ចប់ & បង្កើត PDF ({count} រូប)", callback_data="finish_combine")
+    btn_done = InlineKeyboardButton(f"📥 បង្កើត PDF ({count} រូប)", callback_data="finish_combine")
     btn_cancel = InlineKeyboardButton("❌ បោះបង់", callback_data="cancel_combine")
     markup.add(btn_done, btn_cancel)
     return markup
@@ -66,12 +66,12 @@ def send_welcome(message):
     welcome_text = (
         f"ជំរាបសួរ! 📊\nសូមផ្ញើរូបថតមក ខ្ញុំនឹងបំប្លែងវាទៅជា PDF ជូន។\n\n"
         f"🎁 **ឥតគិតថ្លៃ ៖** {DAILY_FREE_LIMIT} រូប/ថ្ងៃ\n"
-        f"💡 **ទន្លឺ ៖** អាចផ្ញើរូបម្ដងមួយ ឬផ្ញើរូបច្រើនសន្លឹកចូលគ្នាក្នុង File តែមួយបាន!\n\n"
-        f"👇 **ប្រសិនបើចង់ទិញកូតបន្ថែម សូមជ្រើសរើសកញ្ចប់ខាងក្រោម ៖**"
+        f"💡 **របៀបប្រើ ៖** ផ្ញើរូបចូល រួចចុចប៊ូតុងបង្កើត PDF ជាការស្រេច!\n\n"
+        f"👇 **ប្រសិនបើចង់ទិញកូតបន្ថែម ៖**"
     )
     bot.reply_to(message, welcome_text, reply_markup=get_package_keyboard(), parse_mode="Markdown")
 
-# --- Catch ការចុចប៊ូតុងកញ្ចប់ ---
+# --- ចុចប៊ូតុងទិញកញ្ចប់ ---
 @bot.callback_query_handler(func=lambda call: call.data.startswith('pkg_'))
 def handle_package_selection(call):
     _, price, amount = call.data.split('_')
@@ -86,7 +86,7 @@ def handle_package_selection(call):
         f"• **ABA រៀល (៛) ៖** `600 272 171` ({price_khr:,} ៛)\n"
         f"• **ឈ្មោះ ៖** POV VANNAK\n\n"
         f"🆔 **User ID របស់អ្នក ៖** `{user_id}` *(សូម Copy លេខនេះ)*\n\n"
-        f"📩 បាញ់ប្រាក់រួច សូមផ្ញើ **រូបភាពវិក្កយបត្រ (Receipt)** + **User ID** មកកាន់ Admin ដើម្បីបើកកញ្ចប់!"
+        f"📩 បាញ់ប្រាក់រួច សូមផ្ញើ **រូបភាពវិក្កយបត្រ (Receipt)** + **User ID** មកកាន់ Admin!"
     )
 
     admin_markup = InlineKeyboardMarkup()
@@ -99,10 +99,10 @@ def handle_package_selection(call):
                 bot.send_photo(call.message.chat.id, photo=qr_photo, caption=payment_info, reply_markup=admin_markup, parse_mode="Markdown")
         else:
             bot.send_message(call.message.chat.id, payment_info, reply_markup=admin_markup, parse_mode="Markdown")
-    except Exception as e:
+    except Exception:
         bot.send_message(call.message.chat.id, payment_info, reply_markup=admin_markup, parse_mode="Markdown")
 
-# --- Catch ការចុចប៊ូតុងបង្កើត PDF បញ្ចូលគ្នា (Combine) ---
+# --- ចុចប៊ូតុង បង្កើត PDF ឬ បោះបង់ ---
 @bot.callback_query_handler(func=lambda call: call.data in ['finish_combine', 'cancel_combine'])
 def handle_combine_action(call):
     user_id = call.from_user.id
@@ -110,49 +110,45 @@ def handle_combine_action(call):
     if call.data == 'cancel_combine':
         if user_id in user_sessions:
             del user_sessions[user_id]
-        bot.answer_callback_query(call.id, "បានបោះបង់ការរួមបញ្ចូលរូបភាព!")
-        bot.edit_message_text("❌ បានបោះបង់ចោលការបង្កើត PDF រួមបញ្ចូលគ្នា!", call.message.chat.id, call.message.message_id)
+        bot.answer_callback_query(call.id, "បានបោះបង់!")
+        bot.edit_message_text("❌ បានបោះបង់ការបង្កើត PDF!", call.message.chat.id, call.message.message_id)
         return
 
     if call.data == 'finish_combine':
         if user_id not in user_sessions or not user_sessions[user_id]:
-            bot.answer_callback_query(call.id, "មិនមានរូបភាពសម្រាប់បង្កើត PDF ទេ!")
+            bot.answer_callback_query(call.id, "មិនមានរូបភាពទេ!")
             return
 
-        bot.answer_callback_query(call.id, "កំពុងបង្កើត និងផ្ញើ PDF...")
+        bot.answer_callback_query(call.id, "កំពុងបង្កើត PDF...")
         images = user_sessions[user_id]
         
         try:
             pdf_bytes = io.BytesIO()
-            # 🛠️ កែសម្រួល៖ បន្ថែម quality=75 និង optimize=True ឱ្យទំហំ PDF ស្រាល មិន timeout ពេល Upload
             images[0].save(
                 pdf_bytes, 
                 format='PDF', 
                 save_all=True, 
                 append_images=images[1:], 
                 optimize=True, 
-                quality=75
+                quality=70
             )
             pdf_bytes.seek(0)
 
-            # 🛠️ បន្ថែម timeout=120 (រង់ចាំបានរហូតដល់ ២ នាទី)
             bot.send_document(
                 call.message.chat.id,
                 pdf_bytes,
-                visible_file_name="Combined_Document.pdf",
-                caption=f"✅ បានរួមបញ្ចូលរូបភាពចំនួន **{len(images)} រូប** ទៅជា 1 File PDF រួចរាល់!",
-                timeout=120
+                visible_file_name="Document.pdf",
+                caption=f"✅ បានបង្កើត PDF ពី **{len(images)} រូប** រួចរាល់!"
             )
             del user_sessions[user_id]
             bot.delete_message(call.message.chat.id, call.message.message_id)
         except Exception as e:
-            bot.send_message(call.message.chat.id, f"មានបញ្ហាក្នុងការបង្កើត PDF៖ {e}")
+            bot.send_message(call.message.chat.id, f"មានបញ្ហា ៖ {e}")
 
-# --- Command បន្ថែម Quota ---
+# --- Command បន្ថែម Quota សម្រាប់ Admin ---
 @bot.message_handler(commands=['add'])
 def add_extra_quota(message):
     if message.from_user.id != ADMIN_ID:
-        bot.reply_to(message, "❌ អ្នកមិនមានសិទ្ធិប្រើប្រាស់ Command នេះទេ!")
         return
 
     try:
@@ -165,19 +161,17 @@ def add_extra_quota(message):
             user_data[target_user_id] = {"date": today, "used": 0, "extra": 0}
 
         user_data[target_user_id]["extra"] += amount
-        bot.reply_to(message, f"✅ បានបន្ថែម {amount} រូបជូន User ID: `{target_user_id}` រួចរាល់!", parse_mode="Markdown")
+        bot.reply_to(message, f"✅ បានបន្ថែម {amount} រូបជូន `{target_user_id}`!", parse_mode="Markdown")
         
         thank_you_msg = (
             f"🎉 **ការទូទាត់ទទួលបានជោគជ័យ!**\n\n"
-            f"សូមអរគុណដែលបានជ្រើសរើសសេវាកម្មយើងខ្ញុំ! 🙏✨\n"
-            f"អ្នកទទួលបានសិទ្ធិបំប្លែងរូបភាព **{amount} រូបបន្ថែម** រួចរាល់ហើយ!\n\n"
-            f"សូមផ្ញើរូបភាពមកកាន់ Bot ដើម្បីបំប្លែងបានភ្លាមៗ! 📄"
+            f"អ្នកទទួលបានសិទ្ធិបំប្លែងរូបភាព **{amount} រូបបន្ថែម** រួចរាល់ហើយ! 🙏✨"
         )
         bot.send_message(target_user_id, thank_you_msg, parse_mode="Markdown")
-    except Exception as e:
-        bot.reply_to(message, "❌ ទម្រង់មិនត្រឹមត្រូវ! សូមវាយ៖ `/add USER_ID ចំនួនរូប`", parse_mode="Markdown")
+    except Exception:
+        bot.reply_to(message, "❌ ប្រើ៖ `/add USER_ID ចំនួនរូប`", parse_mode="Markdown")
 
-# --- ទទួលរូបភាព និងបំប្លែង ---
+# --- ទទួលរូបភាព ---
 @bot.message_handler(content_types=['photo', 'document'])
 def handle_photo_or_document(message):
     user_id = message.from_user.id
@@ -193,7 +187,7 @@ def handle_photo_or_document(message):
         if mime.startswith('image/') or doc_name.lower().endswith(valid_exts):
             file_id = message.document.file_id
         else:
-            bot.reply_to(message, "❌ សូមផ្ញើតែរូបភាព (JPG, PNG, WEBP, ...) ប៉ុណ្ណោះ!")
+            bot.reply_to(message, "❌ សូមផ្ញើតែរូបភាព (JPG, PNG) ប៉ុណ្ណោះ!")
             return
 
     if not file_id:
@@ -203,11 +197,11 @@ def handle_photo_or_document(message):
     if user_id not in user_data or user_data[user_id]["date"] != today:
         user_data[user_id] = {"date": today, "used": 0, "extra": 0}
 
-    total_allowed = DAILY_FREE_LIMIT + user_data[user_data[user_id].get("extra", 0)] if "extra" in user_data[user_id] else DAILY_FREE_LIMIT
+    total_allowed = DAILY_FREE_LIMIT + user_data[user_id].get("extra", 0)
     used_count = user_data[user_id]["used"]
 
     if used_count >= total_allowed:
-        limit_msg = f"⚠️ **អ្នកបានប្រើប្រាស់អស់កំណត់ {total_allowed} រូបសម្រាប់ថ្ងៃនេះហើយ!**\n\nសូមជ្រើសរើសកញ្ចប់ខាងក្រោម ដើម្បីទិញកូតបន្ថែម ៖"
+        limit_msg = f"⚠️ **អ្នកបានប្រើអស់កំណត់ {total_allowed} រូបសម្រាប់ថ្ងៃនេះហើយ!**"
         bot.reply_to(message, limit_msg, reply_markup=get_package_keyboard(), parse_mode="Markdown")
         return
 
@@ -219,9 +213,8 @@ def handle_photo_or_document(message):
         if image.mode in ("RGBA", "P"):
             image = image.convert("RGB")
 
-        # 🛠️ បង្រួមទំហំរូបភាពឱ្យនៅត្រឹមទំហំសមរម្យ (1280px) ដើម្បីកុំឱ្យធំពេក
-        max_size = (1280, 1280)
-        image.thumbnail(max_size, Image.Resampling.LANCZOS)
+        # បង្រួមទំហំរូបដើម្បីកុំឱ្យធំពេក (Compress)
+        image.thumbnail((1200, 1200), Image.Resampling.LANCZOS)
 
         if user_id not in user_sessions:
             user_sessions[user_id] = []
@@ -231,16 +224,14 @@ def handle_photo_or_document(message):
         count = len(user_sessions[user_id])
 
         msg_text = (
-            f"📸 ទទួលបានរូបភាពទី **{count}** រួចរាល់!\n\n"
-            f"• ប្រសិនបើចង់បន្ថែមរូបទៀត សូមផ្ញើរូបបន្តបន្ទាប់មក។\n"
-            f"• ពេលផ្ញើរូបអស់ហើយ ចុចប៊ូតុងខាងក្រោមដើម្បីបង្កើតជា **1 File PDF** ៖"
+            f"📸 ទទួលបានរូបភាពទី **{count}**!\n\n"
+            f"• ផ្ញើរូបបន្ថែមទៀត ឬចុចប៊ូតុងខាងក្រោមដើម្បីបង្កើត PDF ៖"
         )
 
         bot.reply_to(message, msg_text, reply_markup=get_combine_keyboard(count), parse_mode="Markdown")
 
     except Exception as e:
-        bot.reply_to(message, f"មានបញ្ហាក្នុងការដំណើរការរូបភាព៖ {e}")
+        bot.reply_to(message, f"មានបញ្ហា ៖ {e}")
 
 print("Bot កំពុងដំណើរការ...")
-# 🛠️ បន្ថែម timeout លើ bot.polling ឱ្យប្រព័ន្ធដើរស្ទាត់ និងមិនប្រឈមការបាត់ Connection
-bot.polling(non_stop=True, timeout=60, long_polling_timeout=60)
+bot.infinity_polling()
