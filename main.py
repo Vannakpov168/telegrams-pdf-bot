@@ -27,13 +27,13 @@ def run_http_server():
 
 threading.Thread(target=run_http_server, daemon=True).start()
 
-# --- ២. Telegram Bot Configuration ---
+# --- ២. Telegram Bot Configuration (បន្ថែម Timeout វែងជាងមុន) ---
 TOKEN = '8758108648:AAEiPmCO15tKVdg5qw7s0Ueh5vUjIDDF9So'
 ADMIN_ID = 567818061
 
 bot = telebot.TeleBot(TOKEN)
 user_data = {}
-user_sessions = {}  # សម្រាប់រក្សារូបភាពរួមបញ្ចូលគ្នារបស់ User
+user_sessions = {}
 DAILY_FREE_LIMIT = 10
 
 # --- អនុគមន៍បង្កើត ប៊ូតុងជ្រើសរើសកញ្ចប់ ---
@@ -119,20 +119,29 @@ def handle_combine_action(call):
             bot.answer_callback_query(call.id, "មិនមានរូបភាពសម្រាប់បង្កើត PDF ទេ!")
             return
 
-        bot.answer_callback_query(call.id, "កំពុងបង្កើត PDF...")
+        bot.answer_callback_query(call.id, "កំពុងបង្កើត និងផ្ញើ PDF...")
         images = user_sessions[user_id]
         
         try:
             pdf_bytes = io.BytesIO()
-            # បំប្លែង និងរួមបញ្ចូលគ្រប់រូបភាពចូលជា File តែមួយ
-            images[0].save(pdf_bytes, format='PDF', save_all=True, append_images=images[1:])
+            # 🛠️ កែសម្រួល៖ បន្ថែម quality=75 និង optimize=True ឱ្យទំហំ PDF ស្រាល មិន timeout ពេល Upload
+            images[0].save(
+                pdf_bytes, 
+                format='PDF', 
+                save_all=True, 
+                append_images=images[1:], 
+                optimize=True, 
+                quality=75
+            )
             pdf_bytes.seek(0)
 
+            # 🛠️ បន្ថែម timeout=120 (រង់ចាំបានរហូតដល់ ២ នាទី)
             bot.send_document(
                 call.message.chat.id,
                 pdf_bytes,
                 visible_file_name="Combined_Document.pdf",
-                caption=f"✅ បានរួមបញ្ចូលរូបភាពចំនួន **{len(images)} រូប** ទៅជា 1 File PDF រួចរាល់!"
+                caption=f"✅ បានរួមបញ្ចូលរូបភាពចំនួន **{len(images)} រូប** ទៅជា 1 File PDF រួចរាល់!",
+                timeout=120
             )
             del user_sessions[user_id]
             bot.delete_message(call.message.chat.id, call.message.message_id)
@@ -194,7 +203,7 @@ def handle_photo_or_document(message):
     if user_id not in user_data or user_data[user_id]["date"] != today:
         user_data[user_id] = {"date": today, "used": 0, "extra": 0}
 
-    total_allowed = DAILY_FREE_LIMIT + user_data[user_id]["extra"]
+    total_allowed = DAILY_FREE_LIMIT + user_data[user_data[user_id].get("extra", 0)] if "extra" in user_data[user_id] else DAILY_FREE_LIMIT
     used_count = user_data[user_id]["used"]
 
     if used_count >= total_allowed:
@@ -203,7 +212,6 @@ def handle_photo_or_document(message):
         return
 
     try:
-        # ទាញយករូបភាព
         file_info = bot.get_file(file_id)
         downloaded_file = bot.download_file(file_info.file_path)
 
@@ -211,11 +219,10 @@ def handle_photo_or_document(message):
         if image.mode in ("RGBA", "P"):
             image = image.convert("RGB")
 
-        # 🛠️ ដំណោះស្រាយចំពោះ File ធំ៖ Compress / Resize រូបភាព ប្រសិនបើធំពេក
-        max_size = (1600, 1600)
+        # 🛠️ បង្រួមទំហំរូបភាពឱ្យនៅត្រឹមទំហំសមរម្យ (1280px) ដើម្បីកុំឱ្យធំពេក
+        max_size = (1280, 1280)
         image.thumbnail(max_size, Image.Resampling.LANCZOS)
 
-        # រក្សាទុកក្នុង Session របស់ User
         if user_id not in user_sessions:
             user_sessions[user_id] = []
         
@@ -235,4 +242,5 @@ def handle_photo_or_document(message):
         bot.reply_to(message, f"មានបញ្ហាក្នុងការដំណើរការរូបភាព៖ {e}")
 
 print("Bot កំពុងដំណើរការ...")
-bot.polling()
+# 🛠️ បន្ថែម timeout លើ bot.polling ឱ្យប្រព័ន្ធដើរស្ទាត់ និងមិនប្រឈមការបាត់ Connection
+bot.polling(non_stop=True, timeout=60, long_polling_timeout=60)
