@@ -97,7 +97,7 @@ def show_admin_stats(message):
     )
     bot.reply_to(message, stat_msg, parse_mode="Markdown")
 
-# --- ប៊ូតុង និង Keyboard ថ្មី (គ្មានប៊ូតុង Combine ទៀតទេ) ---
+# --- ប៊ូតុង និង Keyboard (គ្មានប៊ូតុង Combine ទេ) ---
 def get_donate_keyboard():
     markup = InlineKeyboardMarkup()
     btn_donate = InlineKeyboardButton("☕️ ឧបត្ថម្ភថ្លៃកាហ្វេ / Donate ☕️", callback_data="show_donate")
@@ -107,7 +107,7 @@ def get_donate_keyboard():
 def get_quality_keyboard():
     markup = InlineKeyboardMarkup(row_width=2)
     
-    # ប៊ូតុងជ្រើសរើស Quality (ចុចភ្លាម បង្កើត PDF ភ្លាម!)
+    # ចុចលើ Quality មួយណា បង្កើត PDF ភ្លាមៗតែម្តង
     q100 = InlineKeyboardButton("✨ 100% (ច្បាស់)", callback_data="make_100")
     q75  = InlineKeyboardButton("⚡️ 75% (មធ្យម)", callback_data="make_75")
     q50  = InlineKeyboardButton("📦 50% (ល្មម)", callback_data="make_50")
@@ -155,7 +155,7 @@ def handle_donate_selection(call):
     except Exception:
         bot.send_message(call.message.chat.id, payment_info, parse_mode="Markdown")
 
-# --- Catch ការចុចប៊ូតុង Quality ដើម្បីបង្កើត PDF ភ្លាមៗ ---
+# --- បង្កើត PDF ភ្លាមៗពេលចុច Quality ---
 @bot.callback_query_handler(func=lambda call: call.data.startswith('make_'))
 def handle_make_pdf(call):
     user_id = call.from_user.id
@@ -165,7 +165,7 @@ def handle_make_pdf(call):
         bot.answer_callback_query(call.id, "មិនមានរូបភាពទេ!")
         return
 
-    bot.answer_callback_query(call.id, f"កំពុងបង្កើត PDF (Quality: {selected_quality}%)...")
+    bot.answer_callback_query(call.id, f"កំពុងបង្កើត PDF ({selected_quality}%)...")
     images = user_sessions[user_id]
     
     raw_name = user_filenames.get(user_id, "Combined_Document")
@@ -198,7 +198,7 @@ def handle_make_pdf(call):
             caption=caption_msg
         )
         
-        # លុប Data ចោល
+        # Clear Memory
         del user_sessions[user_id]
         if user_id in user_filenames: del user_filenames[user_id]
         if user_id in user_prompt_msg: del user_prompt_msg[user_id]
@@ -212,7 +212,7 @@ def handle_make_pdf(call):
     except Exception as e:
         bot.send_message(call.message.chat.id, f"មានបញ្ហា ៖ {e}")
 
-# --- Catch ប៊ូតុងបោះបង់ ---
+# --- ប៊ូតុងបោះបង់ ---
 @bot.callback_query_handler(func=lambda call: call.data == 'cancel_combine')
 def handle_cancel(call):
     user_id = call.from_user.id
@@ -223,7 +223,7 @@ def handle_cancel(call):
     bot.answer_callback_query(call.id, "បានបោះបង់!")
     bot.edit_message_text("❌ បានបោះបង់ការបង្កើត PDF!", call.message.chat.id, call.message.message_id)
 
-# --- មុខងារផ្ញើ ឬ Update សារជម្រើសតែ ១ គត់ ---
+# --- ផ្ញើ ឬ Update សារតែ ១ ប៉ុណ្ណោះ ---
 def send_or_update_prompt(chat_id, user_id):
     if user_id in user_sessions and user_sessions[user_id]:
         count = len(user_sessions[user_id])
@@ -233,10 +233,10 @@ def send_or_update_prompt(chat_id, user_id):
         msg_text = (
             f"📸 ទទួលបានរូបភាពចំនួន <b>{count} រូប</b> រួចរាល់!\n"
             f"🏷 ឈ្មោះ File ៖ <b>{clean_fname}.pdf</b>\n\n"
-            f"👇 **សូមជ្រើសរើស Quality ខាងក្រោម ដើម្បីបង្កើតជា File PDF ៖**"
+            f"👇 <b>សូមជ្រើសរើស Quality ខាងក្រោម ដើម្បីបង្កើតជា PDF ៖</b>"
         )
 
-        # បើមានសារចាស់ស្រាប់ គ្រាន់តែ Edit វា (មិនផ្ញើសារថ្មីជាន់)
+        # បើធ្លាប់ផ្ញើសាររួចហើយ គឺគ្រាន់តែ Update ចំនួនរូបលើសារចាស់ (មិនផ្ញើសារថ្មីទេ)
         if user_id in user_prompt_msg:
             try:
                 bot.edit_message_text(
@@ -248,9 +248,9 @@ def send_or_update_prompt(chat_id, user_id):
                 )
                 return
             except Exception:
-                pass # បើ Edit មិនកើត វានឹងចុះទៅផ្ញើសារថ្មី
+                pass
 
-        # ផ្ញើសារថ្មី ប្រសិនបើមិនទាន់មាន
+        # បើមិនទាន់មានសារទេ ទើបផ្ញើសារថ្មី
         msg = bot.send_message(chat_id, msg_text, reply_markup=get_quality_keyboard(), parse_mode="HTML")
         user_prompt_msg[user_id] = msg.message_id
 
@@ -294,11 +294,11 @@ def handle_photo_or_document(message):
         
         user_sessions[user_id].append(image)
 
+        # កុំឱ្យប្រញាប់ចេញសារ ត្រូវរង់ចាំ 2.5 វិនាទីដើម្បីប្រមូលរូបភាពឱ្យអស់សិន
         if user_id in user_timers:
             user_timers[user_id].cancel()
 
-        # រង់ចាំ 1.5 វិនាទី បើ User ផ្ញើរូបភាពមកច្រើនក្នុងពេលតែមួយ
-        t = threading.Timer(1.5, send_or_update_prompt, args=[chat_id, user_id])
+        t = threading.Timer(2.5, send_or_update_prompt, args=[chat_id, user_id])
         user_timers[user_id] = t
         t.start()
 
