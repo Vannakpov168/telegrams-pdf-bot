@@ -31,6 +31,7 @@ TOKEN = '8758108648:AAEiPmCO15tKVdg5qw7s0Ueh5vUjIDDF9So'
 
 bot = telebot.TeleBot(TOKEN)
 user_sessions = {}  # រក្សារូបភាពសម្រាប់ Combine
+user_timers = {}    # រក្សា Timer សម្រាប់ដោះស្រាយការផ្ញើរូបភាពច្រើនក្នុងពេលតែមួយ
 
 # --- ប៊ូតុង Donate/ទិញកាហ្វេជូន Admin ---
 def get_donate_keyboard():
@@ -42,7 +43,7 @@ def get_donate_keyboard():
 # --- ប៊ូតុង បង្កើត PDF (Combine) ---
 def get_combine_keyboard(count):
     markup = InlineKeyboardMarkup(row_width=2)
-    btn_done = InlineKeyboardButton(f"📥 បង្កើត PDF ({count} រូប)", callback_data="finish_combine")
+    btn_done = InlineKeyboardButton(f"📥 បង្កើត PDF Combine ({count} រូប)", callback_data="finish_combine")
     btn_cancel = InlineKeyboardButton("❌ បោះបង់", callback_data="cancel_combine")
     btn_donate = InlineKeyboardButton("☕️ ឧបត្ថម្ភ Admin", callback_data="show_donate")
     markup.add(btn_done, btn_cancel)
@@ -55,8 +56,8 @@ def send_welcome(message):
         f"ជំរាបសួរ! 📊\n"
         f"សេវាកម្មបំប្លែងរូបភាពទៅជា PDF **ឥតគិតថ្លៃ ឥតកំណត់ (Unlimited Free)!** 🎉\n\n"
         f"💡 **របៀបប្រើប្រាស់ ៖**\n"
-        f"1️⃣ ផ្ញើរូបភាពរបស់អ្នកមកកាន់ Bot (ម្តងមួយៗ ឬច្រើនរូប)\n"
-        f"2️⃣ ចុចប៊ូតុង **📥 បង្កើត PDF** ដើម្បីទាញយកឯកសារ\n\n"
+        f"1️⃣ ជ្រើសរើស និងផ្ញើរូបភាពរបស់អ្នកចូលមកក្នុង Bot (ចាប់ពី ១ ដល់ច្រើនរូប)\n"
+        f"2️⃣ Bot នឹងប្រមូលរូបភាពទាំងអស់ រួចផ្ញើប៊ូតុង **📥 បង្កើត PDF Combine** ជូនលោកអ្នកតែ ១ សារប៉ុណ្ណោះ!\n\n"
         f"🙏 ប្រសិនបើចូលចិត្តសេវាកម្មនេះ លោកអ្នកអាចជួយឧបត្ថម្ភថ្លៃកាហ្វេដើម្បីគាំទ្រ Server បាន!"
     )
     bot.reply_to(message, welcome_text, reply_markup=get_donate_keyboard(), parse_mode="Markdown")
@@ -64,8 +65,6 @@ def send_welcome(message):
 # --- Catch ការចុចប៊ូតុង Donate ---
 @bot.callback_query_handler(func=lambda call: call.data == 'show_donate')
 def handle_donate_selection(call):
-    user_id = call.from_user.id
-
     payment_info = (
         f"🎉 **សូមអរគុណសម្រាប់ការគាំទ្រ និងឧបត្ថម្ភដល់ការអភិវឌ្ឍន៍ Bot នេះ!** 🙏✨\n\n"
         f"📲 **សូមស្កែន QR Code ខាងលើ ឬផ្ញើតាមគណនី ABA ៖**\n"
@@ -101,7 +100,7 @@ def handle_combine_action(call):
             bot.answer_callback_query(call.id, "មិនមានរូបភាពទេ!")
             return
 
-        bot.answer_callback_query(call.id, "កំពុងបង្កើត PDF...")
+        bot.answer_callback_query(call.id, "កំពុងបង្កើត PDF Combine...")
         images = user_sessions[user_id]
         
         try:
@@ -119,18 +118,29 @@ def handle_combine_action(call):
             bot.send_document(
                 call.message.chat.id,
                 pdf_bytes,
-                visible_file_name="Document.pdf",
-                caption=f"✅ បានបង្កើត PDF ពី **{len(images)} រូប** រួចរាល់!\n\n🙏 ប្រសិនបើពេញចិត្ត សូមជួយ Donate ដើម្បីគាំទ្រ Server Bot ផងណា! ❤️"
+                visible_file_name="Combined_Document.pdf",
+                caption=f"✅ បានបង្កើត PDF Combine ពី **{len(images)} រូប** រួចរាល់!\n\n🙏 ប្រសិនបើពេញចិត្ត សូមជួយ Donate ដើម្បីគាំទ្រ Server Bot ផងណា! ❤️"
             )
             del user_sessions[user_id]
             bot.delete_message(call.message.chat.id, call.message.message_id)
         except Exception as e:
             bot.send_message(call.message.chat.id, f"មានបញ្ហា ៖ {e}")
 
+# --- អនុវត្តការផ្ញើសារប៊ូតុងតែ ១ បន្ទាប់ពីទទួលរូបភាពអស់ ---
+def send_combine_prompt(chat_id, user_id):
+    if user_id in user_sessions and user_sessions[user_id]:
+        count = len(user_sessions[user_id])
+        msg_text = (
+            f"📸 ទទួលបានរូបភាពចំនួន **{count} រូប** រួចរាល់!\n\n"
+            f"• ចុចប៊ូតុងខាងក្រោមដើម្បីបង្កើតជា **១ File PDF Combine** ៖"
+        )
+        bot.send_message(chat_id, msg_text, reply_markup=get_combine_keyboard(count), parse_mode="Markdown")
+
 # --- ទទួលរូបភាព ---
 @bot.message_handler(content_types=['photo', 'document'])
 def handle_photo_or_document(message):
     user_id = message.from_user.id
+    chat_id = message.chat.id
 
     file_id = None
     if message.photo:
@@ -163,14 +173,15 @@ def handle_photo_or_document(message):
             user_sessions[user_id] = []
         
         user_sessions[user_id].append(image)
-        count = len(user_sessions[user_id])
 
-        msg_text = (
-            f"📸 ទទួលបានរូបភាពទី **{count}** រួចរាល់!\n\n"
-            f"• អាចផ្ញើរូបបន្ថែមទៀត ឬចុចប៊ូតុងខាងក្រោមដើម្បីទាញយក **PDF** ៖"
-        )
+        # ប្រសិនបើមាន Timer ចាស់ កំពុងរង់ចាំ ត្រូវលុបវាចោល រួចបង្កើត Timer ថ្មី
+        if user_id in user_timers:
+            user_timers[user_id].cancel()
 
-        bot.reply_to(message, msg_text, reply_markup=get_combine_keyboard(count), parse_mode="Markdown")
+        # រង់ចាំ ១.៥ វិនាទី បើគ្មានរូបផ្ញើមកទៀតទេ ទើបផ្ញើប៊ូតុង Combine តែ ១ មក
+        t = threading.Timer(1.5, send_combine_prompt, args=[chat_id, user_id])
+        user_timers[user_id] = t
+        t.start()
 
     except Exception as e:
         bot.reply_to(message, f"មានបញ្ហា ៖ {e}")
