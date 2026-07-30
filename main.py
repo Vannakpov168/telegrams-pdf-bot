@@ -31,12 +31,13 @@ threading.Thread(target=run_http_server, daemon=True).start()
 
 # --- ២. Telegram Bot Configuration ---
 TOKEN = '8758108648:AAEiPmCO15tKVdg5qw7s0Ueh5vUjIDDF9So'
-ADMIN_ID = 567818061 # ជំនួសដោយ User ID Telegram របស់អ្នក
+ADMIN_ID = 567818061 
 
 bot = telebot.TeleBot(TOKEN)
-user_sessions = {}  # រក្សារូបភាព
-user_filenames = {} # រក្សាឈ្មោះ File Name
-user_timers = {}    # រក្សា Timer
+user_sessions = {}   # រក្សារូបភាព
+user_filenames = {}  # រក្សាឈ្មោះ File
+user_qualities = {}  # រក្សាកម្រិត Quality (Default = 75)
+user_timers = {}     # រក្សា Timer
 
 # --- ៣. ប្រព័ន្ធគ្រប់គ្រងស្ថិតិ (Stats Management) ---
 STATS_FILE = 'bot_stats.json'
@@ -71,11 +72,9 @@ def record_user(user_id):
         bot_stats["total_users"].append(user_id)
         save_stats(bot_stats)
 
-# --- 🛠️ អនុគមន៍សម្អាតឈ្មោះ File & Markdown សុវត្ថិភាព ---
+# --- 🛠️ អនុគមន៍សម្អាតឈ្មោះ File ---
 def sanitize_filename(filename):
-    # លុបសញ្ញាពិសេសរំខានចេញ រក្សាទុកតែអក្សរ លេខ ដកឃ្លា និងសញ្ញា -
     cleaned = re.sub(r'[^\w\s\ Khmer-]', '', filename).strip()
-    # លុបសញ្ញា _ ចោល ដើម្បីកុំឱ្យជាន់ Markdown Error
     cleaned = cleaned.replace('_', ' ')
     return cleaned if cleaned else "Combined_Document"
 
@@ -98,18 +97,28 @@ def show_admin_stats(message):
     )
     bot.reply_to(message, stat_msg, parse_mode="Markdown")
 
-# --- ប៊ូតុង និងមុខងារផ្សេងៗ ---
+# --- ប៊ូតុង និង Keyboard ---
 def get_donate_keyboard():
     markup = InlineKeyboardMarkup()
     btn_donate = InlineKeyboardButton("☕️ ឧបត្ថម្ភថ្លៃកាហ្វេ / Donate ☕️", callback_data="show_donate")
     markup.add(btn_donate)
     return markup
 
-def get_combine_keyboard(count):
+def get_combine_keyboard(count, current_quality=75):
     markup = InlineKeyboardMarkup(row_width=2)
-    btn_done = InlineKeyboardButton(f"📥 បង្កើត PDF Combine ({count} រូប)", callback_data="finish_combine")
+    
+    # ប៊ូតុងជ្រើសរើស Quality
+    q100 = InlineKeyboardButton("✨ 100% (ច្បាស់)", callback_data="q_100")
+    q75  = InlineKeyboardButton("⚡️ 75% (មធ្យម)", callback_data="q_75")
+    q50  = InlineKeyboardButton("📦 50% (ល្មម)", callback_data="q_50")
+    q20  = InlineKeyboardButton("🪶 20% (ស្រាល)", callback_data="q_20")
+    
+    btn_done = InlineKeyboardButton(f"📥 បង្កើត PDF Combine ({count} រូប) [{current_quality}%]", callback_data="finish_combine")
     btn_cancel = InlineKeyboardButton("❌ បោះបង់", callback_data="cancel_combine")
     btn_donate = InlineKeyboardButton("☕️ ឧបត្ថម្ភ Admin", callback_data="show_donate")
+    
+    markup.add(q100, q75)
+    markup.add(q50, q20)
     markup.add(btn_done, btn_cancel)
     markup.add(btn_donate)
     return markup
@@ -122,8 +131,9 @@ def send_welcome(message):
         f"សេវាកម្មបំប្លែងរូបភាពទៅជា PDF **ឥតគិតថ្លៃ ឥតកំណត់!** 🎉\n\n"
         f"💡 **របៀបប្រើប្រាស់ ៖**\n"
         f"1️⃣ ជ្រើសរើស និងផ្ញើរូបភាពរបស់អ្នកចូលមកក្នុង Bot\n"
-        f"2️⃣ **ល្បិចពិសេស ៖** លោកអ្នកអាច **វាយឈ្មោះ File ក្នុង Caption** ភ្ជាប់ជាមួយរូបភាព នោះ File PDF នឹងចេញមកតាមឈ្មោះនោះ!\n"
-        f"3️⃣ ចុចប៊ូតុង **📥 បង្កើត PDF Combine** ជាការស្រេច!\n\n"
+        f"2️⃣ អាច **វាយឈ្មោះ File ក្នុង Caption** ភ្ជាប់ជាមួយរូបភាពបាន\n"
+        f"3️⃣ អាច **ជ្រើសរើសកម្រិត Quality (10% - 100%)** តាមតម្រូវការ!\n"
+        f"4️⃣ ចុចប៊ូតុង **📥 បង្កើត PDF Combine** ជាការស្រេច!\n\n"
         f"🙏 ប្រសិនបើចូលចិត្តសេវាកម្មនេះ លោកអ្នកអាចជួយឧបត្ថម្ភថ្លៃកាហ្វេដើម្បីគាំទ្រ Server បាន!"
     )
     bot.reply_to(message, welcome_text, reply_markup=get_donate_keyboard(), parse_mode="Markdown")
@@ -148,15 +158,36 @@ def handle_donate_selection(call):
     except Exception:
         bot.send_message(call.message.chat.id, payment_info, parse_mode="Markdown")
 
+# --- Catch ការជ្រើសរើស Quality 10% - 100% ---
+@bot.callback_query_handler(func=lambda call: call.data.startswith('q_'))
+def handle_quality_change(call):
+    user_id = call.from_user.id
+    quality_val = int(call.data.split('_')[1])
+    user_qualities[user_id] = quality_val
+    
+    bot.answer_callback_query(call.id, f"បានជ្រើសរើស Quality {quality_val}%")
+    
+    count = len(user_sessions.get(user_id, []))
+    fname = user_filenames.get(user_id, "Combined_Document")
+    clean_fname = sanitize_filename(fname)
+
+    msg_text = (
+        f"📸 ទទួលបានរូបភាពចំនួន <b>{count} រូប</b> រួចរាល់!\n"
+        f"🏷 ឈ្មោះ File ៖ <b>{clean_fname}.pdf</b>\n"
+        f"⚙️ គុណភាពរូបភាព ៖ <b>{quality_val}%</b>\n\n"
+        f"• ជ្រើសរើស Quality ខាងក្រោម រួចចុចបង្កើត PDF ៖"
+    )
+    bot.edit_message_text(msg_text, call.message.chat.id, call.message.message_id, reply_markup=get_combine_keyboard(count, quality_val), parse_mode="HTML")
+
+# --- Catch ការចុចប៊ូតុង បង្កើត PDF ឬ បោះបង់ ---
 @bot.callback_query_handler(func=lambda call: call.data in ['finish_combine', 'cancel_combine'])
 def handle_combine_action(call):
     user_id = call.from_user.id
     
     if call.data == 'cancel_combine':
-        if user_id in user_sessions:
-            del user_sessions[user_id]
-        if user_id in user_filenames:
-            del user_filenames[user_id]
+        if user_id in user_sessions: del user_sessions[user_id]
+        if user_id in user_filenames: del user_filenames[user_id]
+        if user_id in user_qualities: del user_qualities[user_id]
         bot.answer_callback_query(call.id, "បានបោះបង់!")
         bot.edit_message_text("❌ បានបោះបង់ការបង្កើត PDF!", call.message.chat.id, call.message.message_id)
         return
@@ -166,7 +197,8 @@ def handle_combine_action(call):
             bot.answer_callback_query(call.id, "មិនមានរូបភាពទេ!")
             return
 
-        bot.answer_callback_query(call.id, "កំពុងបង្កើត PDF Combine...")
+        selected_quality = user_qualities.get(user_id, 75) # Default = 75%
+        bot.answer_callback_query(call.id, f"កំពុងបង្កើត PDF (Quality: {selected_quality}%)...")
         images = user_sessions[user_id]
         
         raw_name = user_filenames.get(user_id, "Combined_Document")
@@ -181,13 +213,14 @@ def handle_combine_action(call):
                 save_all=True, 
                 append_images=images[1:], 
                 optimize=True, 
-                quality=75
+                quality=selected_quality # ប្រើ Quality ដែល User បានជ្រើសរើស
             )
             pdf_bytes.seek(0)
 
             caption_msg = (
                 f"✅ បានបង្កើត PDF រួចរាល់!\n"
-                f"📸 ចំនួន ៖ {len(images)} រូប\n\n"
+                f"📸 ចំនួន ៖ {len(images)} រូប\n"
+                f"⚙️ គុណភាព ៖ {selected_quality}%\n\n"
                 f"🙏 ប្រសិនបើពេញចិត្ត សូមជួយ Donate ដើម្បីគាំទ្រ Server Bot ផងណា! ❤️"
             )
 
@@ -198,9 +231,10 @@ def handle_combine_action(call):
                 caption=caption_msg
             )
             
+            # Clear data
             del user_sessions[user_id]
-            if user_id in user_filenames:
-                del user_filenames[user_id]
+            if user_id in user_filenames: del user_filenames[user_id]
+            if user_id in user_qualities: del user_qualities[user_id]
 
             bot.delete_message(call.message.chat.id, call.message.message_id)
 
@@ -216,13 +250,15 @@ def send_combine_prompt(chat_id, user_id):
         count = len(user_sessions[user_id])
         fname = user_filenames.get(user_id, "Combined_Document")
         clean_fname = sanitize_filename(fname)
+        quality_val = user_qualities.get(user_id, 75)
 
         msg_text = (
             f"📸 ទទួលបានរូបភាពចំនួន <b>{count} រូប</b> រួចរាល់!\n"
-            f"🏷 ឈ្មោះ File ៖ <b>{clean_fname}.pdf</b>\n\n"
+            f"🏷 ឈ្មោះ File ៖ <b>{clean_fname}.pdf</b>\n"
+            f"⚙️ គុណភាពរូបភាព ៖ <b>{quality_val}%</b> (ចុចប៊ូតុងខាងក្រោមដើម្បីប្តូរ)\n\n"
             f"• ចុចប៊ូតុងខាងក្រោមដើម្បីបង្កើតជា File PDF ៖"
         )
-        bot.send_message(chat_id, msg_text, reply_markup=get_combine_keyboard(count), parse_mode="HTML")
+        bot.send_message(chat_id, msg_text, reply_markup=get_combine_keyboard(count, quality_val), parse_mode="HTML")
 
 @bot.message_handler(content_types=['photo', 'document'])
 def handle_photo_or_document(message):
