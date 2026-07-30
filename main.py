@@ -39,38 +39,45 @@ user_filenames = {}  # រក្សាឈ្មោះ File
 user_prompt_msg = {} # រក្សា Message ID របស់ប៊ូតុងជម្រើស
 user_timers = {}     # រក្សា Timer
 
-# --- ៣. ប្រព័ន្ធគ្រប់គ្រងស្ថិតិ (Stats Management) ---
+# --- ៣. ប្រព័ន្ធគ្រប់គ្រងស្ថិតិ (Memory-Based Stats) ---
 STATS_FILE = 'bot_stats.json'
 
 def load_stats():
     if os.path.exists(STATS_FILE):
         try:
-            with open(STATS_FILE, 'r') as f:
-                return json.load(f)
+            with open(STATS_FILE, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                if "total_users" not in data: data["total_users"] = []
+                if "pdfs_today" not in data: data["pdfs_today"] = 0
+                if "photos_today" not in data: data["photos_today"] = 0
+                if "last_date" not in data: data["last_date"] = str(date.today())
+                return data
         except Exception:
             pass
-    return {"total_users": [], "pdfs_today": 0, "last_date": str(date.today())}
-
-def save_stats(stats):
-    try:
-        with open(STATS_FILE, 'w') as f:
-            json.dump(stats, f)
-    except Exception as e:
-        print(f"Error saving stats: {e}")
+    return {"total_users":[], "pdfs_today": 0, "photos_today": 0, "last_date": str(date.today())}
 
 bot_stats = load_stats()
+
+def save_stats():
+    try:
+        with open(STATS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(bot_stats, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"Error saving stats: {e}")
 
 def check_new_day():
     today = str(date.today())
     if bot_stats["last_date"] != today:
         bot_stats["pdfs_today"] = 0
+        bot_stats["photos_today"] = 0
         bot_stats["last_date"] = today
-        save_stats(bot_stats)
+        save_stats()
 
 def record_user(user_id):
+    check_new_day()
     if user_id not in bot_stats["total_users"]:
         bot_stats["total_users"].append(user_id)
-        save_stats(bot_stats)
+        save_stats()
 
 # --- 🛠️ អនុគមន៍សម្អាតឈ្មោះ File (ស្គាល់អក្សរខ្មែរច្បាស់ ១០០%) ---
 def sanitize_filename(filename):
@@ -78,9 +85,10 @@ def sanitize_filename(filename):
     cleaned = cleaned.replace('_', ' ')
     return cleaned if cleaned else "Combined_Document"
 
-# --- Command /stats សម្រាប់ Admin ---
+# --- Command /stats សម្រាប់ Admin តែប៉ុណ្ណោះ ---
 @bot.message_handler(commands=['stats'])
 def show_admin_stats(message):
+    record_user(message.from_user.id)
     if message.from_user.id != ADMIN_ID:
         bot.reply_to(message, "❌ អ្នកមិនមានសិទ្ធិប្រើ Command នេះទេ!")
         return
@@ -88,11 +96,13 @@ def show_admin_stats(message):
     check_new_day()
     total_users = len(bot_stats["total_users"])
     pdfs_today = bot_stats["pdfs_today"]
+    photos_today = bot_stats["photos_today"]
 
     stat_msg = (
-        f"📊 **របាយការណ៍ស្ថិតិ Bot** 📊\n\n"
-        f"👥 **អ្នកប្រើប្រាស់សរុប (Total Users) ៖** `{total_users} នាក់`\n"
-        f"📄 **PDF បានបង្កើតថ្ងៃនេះ ៖** `{pdfs_today} ដង`\n"
+        f"📊 **របាយការណ៍ស្ថិតិ Bot (Admin Only)** 📊\n\n"
+        f"👥 **អ្នកប្រើប្រាស់សរុប ៖** `{total_users} នាក់`\n"
+        f"🖼 **រូបភាព Uploaded ថ្ងៃនេះ ៖** `{photos_today} រូប`\n"
+        f"📄 **PDF បង្កើតបានថ្ងៃនេះ ៖** `{pdfs_today} ឯកសារ`\n"
         f"📅 **កាលបរិច្ឆេទ ៖** `{bot_stats['last_date']}`"
     )
     bot.reply_to(message, stat_msg, parse_mode="Markdown")
@@ -136,6 +146,7 @@ def send_welcome(message):
 
 @bot.callback_query_handler(func=lambda call: call.data == 'show_donate')
 def handle_donate_selection(call):
+    record_user(call.from_user.id)
     payment_info = (
         f"🎉 **សូមអរគុណសម្រាប់ការគាំទ្រ និងឧបត្ថម្ភដល់ការអភិវឌ្ឍន៍ Bot នេះ!** 🙏✨\n\n"
         f"📲 **សូមស្កែន QR Code ខាងលើ ឬផ្ញើតាមគណនី ABA ៖**\n"
@@ -158,6 +169,7 @@ def handle_donate_selection(call):
 @bot.callback_query_handler(func=lambda call: call.data.startswith('make_'))
 def handle_make_pdf(call):
     user_id = call.from_user.id
+    record_user(user_id)
     selected_quality = int(call.data.split('_')[1])
     
     if user_id not in user_sessions or not user_sessions[user_id]:
@@ -204,9 +216,10 @@ def handle_make_pdf(call):
 
         bot.delete_message(call.message.chat.id, call.message.message_id)
 
+        # 📊 កត់ត្រាចំនួន PDF ដែលបានបង្កើត
         check_new_day()
         bot_stats["pdfs_today"] += 1
-        save_stats(bot_stats)
+        save_stats()
         
     except Exception as e:
         bot.send_message(call.message.chat.id, f"មានបញ្ហា ៖ {e}")
@@ -215,6 +228,7 @@ def handle_make_pdf(call):
 @bot.callback_query_handler(func=lambda call: call.data == 'cancel_combine')
 def handle_cancel(call):
     user_id = call.from_user.id
+    record_user(user_id)
     if user_id in user_sessions: del user_sessions[user_id]
     if user_id in user_filenames: del user_filenames[user_id]
     if user_id in user_prompt_msg: del user_prompt_msg[user_id]
@@ -255,7 +269,7 @@ def send_or_update_prompt(chat_id, user_id):
 def handle_photo_or_document(message):
     user_id = message.from_user.id
     chat_id = message.chat.id
-    record_user(user_id)
+    record_user(user_id) # 👈 កត់ត្រា User ភ្លាមៗពេល Upload រូប
 
     file_id = None
     if message.photo:
@@ -290,6 +304,10 @@ def handle_photo_or_document(message):
             user_sessions[user_id] = []
         
         user_sessions[user_id].append(image)
+
+        # 📊 រាប់ចំនួនរូបភាព Uploaded ថ្ងៃនេះ
+        bot_stats["photos_today"] = bot_stats.get("photos_today", 0) + 1
+        save_stats()
 
         if user_id in user_timers:
             user_timers[user_id].cancel()
