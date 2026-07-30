@@ -3,7 +3,9 @@ from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 from PIL import Image
 import io
 import os
+import json
 import threading
+from datetime import date
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 # --- ១. Web Server សម្រាប់ Render + UptimeRobot ---
@@ -28,19 +30,71 @@ threading.Thread(target=run_http_server, daemon=True).start()
 
 # --- ២. Telegram Bot Configuration ---
 TOKEN = '8758108648:AAEiPmCO15tKVdg5qw7s0Ueh5vUjIDDF9So'
+ADMIN_ID = 567818061 # ជំនួសដោយ User ID Telegram របស់អ្នក
 
 bot = telebot.TeleBot(TOKEN)
-user_sessions = {}  # រក្សារូបភាពសម្រាប់ Combine
-user_timers = {}    # រក្សា Timer សម្រាប់ដោះស្រាយការផ្ញើរូបភាពច្រើនក្នុងពេលតែមួយ
+user_sessions = {}  
+user_timers = {}    
 
-# --- ប៊ូតុង Donate/ទិញកាហ្វេជូន Admin ---
+# --- ៣. ប្រព័ន្ធគ្រប់គ្រងស្ថិតិ (Stats Management) ---
+STATS_FILE = 'bot_stats.json'
+
+def load_stats():
+    if os.path.exists(STATS_FILE):
+        try:
+            with open(STATS_FILE, 'r') as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {"total_users": [], "pdfs_today": 0, "last_date": str(date.today())}
+
+def save_stats(stats):
+    try:
+        with open(STATS_FILE, 'w') as f:
+            json.dump(stats, f)
+    except Exception as e:
+        print(f"Error saving stats: {e}")
+
+bot_stats = load_stats()
+
+def check_new_day():
+    today = str(date.today())
+    if bot_stats["last_date"] != today:
+        bot_stats["pdfs_today"] = 0
+        bot_stats["last_date"] = today
+        save_stats(bot_stats)
+
+def record_user(user_id):
+    if user_id not in bot_stats["total_users"]:
+        bot_stats["total_users"].append(user_id)
+        save_stats(bot_stats)
+
+# --- មុខងារ Command សម្រាប់ Admin (/stats) ---
+@bot.message_handler(commands=['stats'])
+def show_admin_stats(message):
+    if message.from_user.id != ADMIN_ID:
+        bot.reply_to(message, "❌ អ្នកមិនមានសិទ្ធិប្រើ Command នេះទេ!")
+        return
+
+    check_new_day()
+    total_users = len(bot_stats["total_users"])
+    pdfs_today = bot_stats["pdfs_today"]
+
+    stat_msg = (
+        f"📊 **របាយការណ៍ស្ថិតិ Bot** 📊\n\n"
+        f"👥 **អ្នកប្រើប្រាស់សរុប (Total Users) ៖** `{total_users} នាក់`\n"
+        f"📄 **PDF បានបង្កើតថ្ងៃនេះ ៖** `{pdfs_today} ដង`\n"
+        f"📅 **កាលបរិច្ឆេទ ៖** `{bot_stats['last_date']}`"
+    )
+    bot.reply_to(message, stat_msg, parse_mode="Markdown")
+
+# --- ប៊ូតុង និងមុខងារផ្សេងៗ ---
 def get_donate_keyboard():
     markup = InlineKeyboardMarkup()
     btn_donate = InlineKeyboardButton("☕️ ឧបត្ថម្ភថ្លៃកាហ្វេ / Donate ☕️", callback_data="show_donate")
     markup.add(btn_donate)
     return markup
 
-# --- ប៊ូតុង បង្កើត PDF (Combine) ---
 def get_combine_keyboard(count):
     markup = InlineKeyboardMarkup(row_width=2)
     btn_done = InlineKeyboardButton(f"📥 បង្កើត PDF Combine ({count} រូប)", callback_data="finish_combine")
@@ -52,6 +106,7 @@ def get_combine_keyboard(count):
 
 @bot.message_handler(commands=['start', 'help'])
 def send_welcome(message):
+    record_user(message.from_user.id) # កត់ត្រា User ពេលចុច Start
     welcome_text = (
         f"ជំរាបសួរ! 📊\n"
         f"សេវាកម្មបំប្លែងរូបភាពទៅជា PDF **ឥតគិតថ្លៃ ឥតកំណត់ (Unlimited Free)!** 🎉\n\n"
@@ -62,7 +117,6 @@ def send_welcome(message):
     )
     bot.reply_to(message, welcome_text, reply_markup=get_donate_keyboard(), parse_mode="Markdown")
 
-# --- Catch ការចុចប៊ូតុង Donate ---
 @bot.callback_query_handler(func=lambda call: call.data == 'show_donate')
 def handle_donate_selection(call):
     payment_info = (
@@ -83,7 +137,6 @@ def handle_donate_selection(call):
     except Exception:
         bot.send_message(call.message.chat.id, payment_info, parse_mode="Markdown")
 
-# --- Catch ការចុចប៊ូតុង បង្កើត PDF ឬ បោះបង់ ---
 @bot.callback_query_handler(func=lambda call: call.data in ['finish_combine', 'cancel_combine'])
 def handle_combine_action(call):
     user_id = call.from_user.id
@@ -123,10 +176,15 @@ def handle_combine_action(call):
             )
             del user_sessions[user_id]
             bot.delete_message(call.message.chat.id, call.message.message_id)
+
+            # កត់ត្រាស្ថិតិ PDF ដែលបានបង្កើតរួច
+            check_new_day()
+            bot_stats["pdfs_today"] += 1
+            save_stats(bot_stats)
+            
         except Exception as e:
             bot.send_message(call.message.chat.id, f"មានបញ្ហា ៖ {e}")
 
-# --- អនុវត្តការផ្ញើសារប៊ូតុងតែ ១ បន្ទាប់ពីទទួលរូបភាពអស់ ---
 def send_combine_prompt(chat_id, user_id):
     if user_id in user_sessions and user_sessions[user_id]:
         count = len(user_sessions[user_id])
@@ -136,11 +194,11 @@ def send_combine_prompt(chat_id, user_id):
         )
         bot.send_message(chat_id, msg_text, reply_markup=get_combine_keyboard(count), parse_mode="Markdown")
 
-# --- ទទួលរូបភាព ---
 @bot.message_handler(content_types=['photo', 'document'])
 def handle_photo_or_document(message):
     user_id = message.from_user.id
     chat_id = message.chat.id
+    record_user(user_id) # កត់ត្រា User
 
     file_id = None
     if message.photo:
@@ -166,7 +224,6 @@ def handle_photo_or_document(message):
         if image.mode in ("RGBA", "P"):
             image = image.convert("RGB")
 
-        # បង្រួមទំហំរូបដើម្បីឱ្យ File ស្រាល និងដើរលឿន
         image.thumbnail((1280, 1280), Image.Resampling.LANCZOS)
 
         if user_id not in user_sessions:
@@ -174,11 +231,9 @@ def handle_photo_or_document(message):
         
         user_sessions[user_id].append(image)
 
-        # ប្រសិនបើមាន Timer ចាស់ កំពុងរង់ចាំ ត្រូវលុបវាចោល រួចបង្កើត Timer ថ្មី
         if user_id in user_timers:
             user_timers[user_id].cancel()
 
-        # រង់ចាំ ១.៥ វិនាទី បើគ្មានរូបផ្ញើមកទៀតទេ ទើបផ្ញើប៊ូតុង Combine តែ ១ មក
         t = threading.Timer(1.5, send_combine_prompt, args=[chat_id, user_id])
         user_timers[user_id] = t
         t.start()
