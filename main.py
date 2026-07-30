@@ -72,9 +72,9 @@ def record_user(user_id):
         bot_stats["total_users"].append(user_id)
         save_stats(bot_stats)
 
-# --- 🛠️ អនុគមន៍សម្អាតឈ្មោះ File ---
+# --- 🛠️ អនុគមន៍សម្អាតឈ្មោះ File (ស្គាល់អក្សរខ្មែរច្បាស់ ១០០%) ---
 def sanitize_filename(filename):
-    cleaned = re.sub(r'[^\w\s\ Khmer-]', '', filename).strip()
+    cleaned = re.sub(r'[^\w\s\u1780-\u17FF-]', '', filename).strip()
     cleaned = cleaned.replace('_', ' ')
     return cleaned if cleaned else "Combined_Document"
 
@@ -97,7 +97,7 @@ def show_admin_stats(message):
     )
     bot.reply_to(message, stat_msg, parse_mode="Markdown")
 
-# --- ប៊ូតុង និង Keyboard (គ្មានប៊ូតុង Combine ទេ) ---
+# --- ប៊ូតុង និង Keyboard ---
 def get_donate_keyboard():
     markup = InlineKeyboardMarkup()
     btn_donate = InlineKeyboardButton("☕️ ឧបត្ថម្ភថ្លៃកាហ្វេ / Donate ☕️", callback_data="show_donate")
@@ -107,7 +107,6 @@ def get_donate_keyboard():
 def get_quality_keyboard():
     markup = InlineKeyboardMarkup(row_width=2)
     
-    # ចុចលើ Quality មួយណា បង្កើត PDF ភ្លាមៗតែម្តង
     q100 = InlineKeyboardButton("✨ 100% (ច្បាស់)", callback_data="make_100")
     q75  = InlineKeyboardButton("⚡️ 75% (មធ្យម)", callback_data="make_75")
     q50  = InlineKeyboardButton("📦 50% (ល្មម)", callback_data="make_50")
@@ -236,7 +235,6 @@ def send_or_update_prompt(chat_id, user_id):
             f"👇 <b>សូមជ្រើសរើស Quality ខាងក្រោម ដើម្បីបង្កើតជា PDF ៖</b>"
         )
 
-        # បើធ្លាប់ផ្ញើសាររួចហើយ គឺគ្រាន់តែ Update ចំនួនរូបលើសារចាស់ (មិនផ្ញើសារថ្មីទេ)
         if user_id in user_prompt_msg:
             try:
                 bot.edit_message_text(
@@ -250,7 +248,6 @@ def send_or_update_prompt(chat_id, user_id):
             except Exception:
                 pass
 
-        # បើមិនទាន់មានសារទេ ទើបផ្ញើសារថ្មី
         msg = bot.send_message(chat_id, msg_text, reply_markup=get_quality_keyboard(), parse_mode="HTML")
         user_prompt_msg[user_id] = msg.message_id
 
@@ -294,7 +291,6 @@ def handle_photo_or_document(message):
         
         user_sessions[user_id].append(image)
 
-        # កុំឱ្យប្រញាប់ចេញសារ ត្រូវរង់ចាំ 2.5 វិនាទីដើម្បីប្រមូលរូបភាពឱ្យអស់សិន
         if user_id in user_timers:
             user_timers[user_id].cancel()
 
