@@ -39,7 +39,7 @@ user_filenames = {}  # រក្សាឈ្មោះ File
 user_prompt_msg = {} # រក្សា Message ID របស់ប៊ូតុងជម្រើស
 user_timers = {}     # រក្សា Timer
 
-# --- ៣. ប្រព័ន្ធគ្រប់គ្រងស្ថិតិ (Memory-Based Stats) ---
+# --- ៣. ប្រព័ន្ធគ្រប់គ្រងស្ថិតិ (ច្បាស់លាស់ ១០០%) ---
 STATS_FILE = 'bot_stats.json'
 
 def load_stats():
@@ -47,14 +47,15 @@ def load_stats():
         try:
             with open(STATS_FILE, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-                if "total_users" not in data: data["total_users"] = []
+                # ធានាថា total_users គ្មាន ID ស្ទួន
+                data["total_users"] = list(set(data.get("total_users", [])))
                 if "pdfs_today" not in data: data["pdfs_today"] = 0
                 if "photos_today" not in data: data["photos_today"] = 0
                 if "last_date" not in data: data["last_date"] = str(date.today())
                 return data
         except Exception:
             pass
-    return {"total_users":[], "pdfs_today": 0, "photos_today": 0, "last_date": str(date.today())}
+    return {"total_users": [], "pdfs_today": 0, "photos_today": 0, "last_date": str(date.today())}
 
 bot_stats = load_stats()
 
@@ -75,8 +76,11 @@ def check_new_day():
 
 def record_user(user_id):
     check_new_day()
-    if user_id not in bot_stats["total_users"]:
-        bot_stats["total_users"].append(user_id)
+    # ប្រើ Set Logic ដើម្បីការពារការរាប់ស្ទួន User តែមួយ
+    current_users = set(bot_stats["total_users"])
+    if user_id not in current_users:
+        current_users.add(user_id)
+        bot_stats["total_users"] = list(current_users)
         save_stats()
 
 # --- 🛠️ អនុគមន៍សម្អាតឈ្មោះ File (ស្គាល់អក្សរខ្មែរច្បាស់ ១០០%) ---
@@ -94,13 +98,14 @@ def show_admin_stats(message):
         return
 
     check_new_day()
-    total_users = len(bot_stats["total_users"])
+    # រាប់ចំនួន User ដែល unique
+    total_users_count = len(set(bot_stats["total_users"]))
     pdfs_today = bot_stats["pdfs_today"]
     photos_today = bot_stats["photos_today"]
 
     stat_msg = (
         f"📊 **របាយការណ៍ស្ថិតិ Bot (Admin Only)** 📊\n\n"
-        f"👥 **អ្នកប្រើប្រាស់សរុប ៖** `{total_users} នាក់`\n"
+        f"👥 **អ្នកប្រើប្រាស់សរុប (Unique Users) ៖** `{total_users_count} នាក់`\n"
         f"🖼 **រូបភាព Uploaded ថ្ងៃនេះ ៖** `{photos_today} រូប`\n"
         f"📄 **PDF បង្កើតបានថ្ងៃនេះ ៖** `{pdfs_today} ឯកសារ`\n"
         f"📅 **កាលបរិច្ឆេទ ៖** `{bot_stats['last_date']}`"
@@ -269,7 +274,7 @@ def send_or_update_prompt(chat_id, user_id):
 def handle_photo_or_document(message):
     user_id = message.from_user.id
     chat_id = message.chat.id
-    record_user(user_id) # 👈 កត់ត្រា User ភ្លាមៗពេល Upload រូប
+    record_user(user_id) # 👈 រាប់ជា 1 User ប៉ុណ្ណោះ ទោះផ្ញើប៉ុន្មានរូបក៏ដោយ
 
     file_id = None
     if message.photo:
@@ -305,7 +310,7 @@ def handle_photo_or_document(message):
         
         user_sessions[user_id].append(image)
 
-        # 📊 រាប់ចំនួនរូបភាព Uploaded ថ្ងៃនេះ
+        # 📊 រាប់ចំនួនរូបភាព Uploaded ថ្ងៃនេះ (+1 តាមចំនួនរូបភាពពិត)
         bot_stats["photos_today"] = bot_stats.get("photos_today", 0) + 1
         save_stats()
 
