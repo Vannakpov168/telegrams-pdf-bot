@@ -35,7 +35,7 @@ ADMIN_ID = 567818061 # ជំនួសដោយ User ID Telegram របស់អ
 
 bot = telebot.TeleBot(TOKEN)
 user_sessions = {}  # រក្សារូបភាព
-user_filenames = {} # រក្សាឈ្មោះ File Name ដែល User វាយចូល
+user_filenames = {} # រក្សាឈ្មោះ File Name
 user_timers = {}    # រក្សា Timer
 
 # --- ៣. ប្រព័ន្ធគ្រប់គ្រងស្ថិតិ (Stats Management) ---
@@ -71,10 +71,12 @@ def record_user(user_id):
         bot_stats["total_users"].append(user_id)
         save_stats(bot_stats)
 
-# --- មុខងារសម្អាតឈ្មោះ File កុំឱ្យមាន Error ---
+# --- 🛠️ អនុគមន៍សម្អាតឈ្មោះ File & Markdown សុវត្ថិភាព ---
 def sanitize_filename(filename):
-    # រក្សាទុកតែអក្សរ លេខ ដកឃ្លា និងសញ្ញា _ - 
+    # លុបសញ្ញាពិសេសរំខានចេញ រក្សាទុកតែអក្សរ លេខ ដកឃ្លា និងសញ្ញា -
     cleaned = re.sub(r'[^\w\s\ Khmer-]', '', filename).strip()
+    # លុបសញ្ញា _ ចោល ដើម្បីកុំឱ្យជាន់ Markdown Error
+    cleaned = cleaned.replace('_', ' ')
     return cleaned if cleaned else "Combined_Document"
 
 # --- Command /stats សម្រាប់ Admin ---
@@ -167,7 +169,6 @@ def handle_combine_action(call):
         bot.answer_callback_query(call.id, "កំពុងបង្កើត PDF Combine...")
         images = user_sessions[user_id]
         
-        # កំណត់ឈ្មោះ File តាម Caption របស់ User (បើគ្មានទេ ប្រើ Combined_Document)
         raw_name = user_filenames.get(user_id, "Combined_Document")
         clean_name = sanitize_filename(raw_name)
         final_pdf_name = f"{clean_name}.pdf"
@@ -184,26 +185,25 @@ def handle_combine_action(call):
             )
             pdf_bytes.seek(0)
 
+            caption_msg = (
+                f"✅ បានបង្កើត PDF រួចរាល់!\n"
+                f"📸 ចំនួន ៖ {len(images)} រូប\n\n"
+                f"🙏 ប្រសិនបើពេញចិត្ត សូមជួយ Donate ដើម្បីគាំទ្រ Server Bot ផងណា! ❤️"
+            )
+
             bot.send_document(
                 call.message.chat.id,
                 pdf_bytes,
                 visible_file_name=final_pdf_name,
-                caption=(
-                    f"✅ បានបង្កើត PDF ឈ្មោះ ៖ **{final_pdf_name}**\n"
-                    f"📸 ចំនួន ៖ **{len(images)} រូប**\n\n"
-                    f"🙏 ប្រសិនបើពេញចិត្ត សូមជួយ Donate ដើម្បីគាំទ្រ Server Bot ផងណា! ❤️"
-                ),
-                parse_mode="Markdown"
+                caption=caption_msg
             )
             
-            # លុប Data ចាស់ចោលបន្ទាប់ពីផ្ញើរួច
             del user_sessions[user_id]
             if user_id in user_filenames:
                 del user_filenames[user_id]
 
             bot.delete_message(call.message.chat.id, call.message.message_id)
 
-            # កត់ត្រាស្ថិតិ
             check_new_day()
             bot_stats["pdfs_today"] += 1
             save_stats(bot_stats)
@@ -218,11 +218,11 @@ def send_combine_prompt(chat_id, user_id):
         clean_fname = sanitize_filename(fname)
 
         msg_text = (
-            f"📸 ទទួលបានរូបភាពចំនួន **{count} រូប** រួចរាល់!\n"
-            f"🏷 ឈ្មោះ File ដែលត្រូវបង្កើត ៖ **{clean_fname}.pdf**\n\n"
+            f"📸 ទទួលបានរូបភាពចំនួន <b>{count} រូប</b> រួចរាល់!\n"
+            f"🏷 ឈ្មោះ File ៖ <b>{clean_fname}.pdf</b>\n\n"
             f"• ចុចប៊ូតុងខាងក្រោមដើម្បីបង្កើតជា File PDF ៖"
         )
-        bot.send_message(chat_id, msg_text, reply_markup=get_combine_keyboard(count), parse_mode="Markdown")
+        bot.send_message(chat_id, msg_text, reply_markup=get_combine_keyboard(count), parse_mode="HTML")
 
 @bot.message_handler(content_types=['photo', 'document'])
 def handle_photo_or_document(message):
@@ -246,7 +246,6 @@ def handle_photo_or_document(message):
     if not file_id:
         return
 
-    # ចាប់យក Caption ដែល User វាយភ្ជាប់ជាមួយរូបភាពដំបូងគេ
     if message.caption and user_id not in user_filenames:
         user_filenames[user_id] = message.caption.strip()
 
