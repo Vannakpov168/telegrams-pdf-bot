@@ -36,13 +36,14 @@ TOKEN = '8758108648:AAEiPmCO15tKVdg5qw7s0Ueh5vUjIDDF9So'
 ADMIN_ID = 567818061 
 
 bot = telebot.TeleBot(TOKEN)
-user_sessions = {}      # រក្សារូបភាព
-user_filenames = {}     # រក្សាឈ្មោះ File
-user_prompt_msg = {}    # រក្សា Message ID របស់ប៊ូតុងជម្រើស
-user_timers = {}        # រក្សា Timer
-user_passwords = {}     # រក្សា Password (បោះបង់ ឬកំណត់)
-user_awaiting_feedback = set() # រក្សា trạng thái ពេល user កំពុងសរសេរ feedback
-user_awaiting_pass = set()     # រក្សា trạng thái ពេល user កំពុងវាយ password
+user_sessions = {}      
+user_filenames = {}     
+user_prompt_msg = {}    
+user_timers = {}        
+user_passwords = {}     
+user_awaiting_feedback = set() 
+user_awaiting_pass = set()     
+admin_reply_target = {} # រក្សា User ID ដែល Admin កំពុង Reply
 
 # --- ៣. ប្រព័ន្ធគ្រប់គ្រងស្ថិតិ ---
 STATS_FILE = 'bot_stats.json'
@@ -91,7 +92,41 @@ def sanitize_filename(filename):
     cleaned = cleaned.replace('_', ' ')
     return cleaned if cleaned else "Combined_Document"
 
-# --- Command /stats សម្រាប់ Admin ---
+# --- 📢 Command /broadcast សម្រាប់ Admin ផ្ញើសារប្រកាស ---
+@bot.message_handler(commands=['broadcast'])
+def handle_broadcast(message):
+    if message.from_user.id != ADMIN_ID:
+        bot.reply_to(message, "❌ អ្នកមិនមានសិទ្ធិប្រើ Command នេះទេ!")
+        return
+
+    # ទាញយកអត្ថបទបន្ទាប់ពី /broadcast
+    msg_to_send = message.text.replace('/broadcast', '').strip()
+    
+    if not msg_to_send:
+        bot.reply_to(message, "⚠️ **សូមវាយអត្ថបទដែលចង់ប្រកាស ៖**\n\nឧទាហរណ៍ ៖ `/broadcast ជំរាបសួរ! Bot បានអាប់ដេតមុខងារថ្មី...`", parse_mode="Markdown")
+        return
+
+    users = set(bot_stats.get("total_users", []))
+    success_count = 0
+    fail_count = 0
+
+    status_msg = bot.reply_to(message, f"⏳ កំពុងផ្ញើសារទៅកាន់ User ចំនួន {len(users)} នាក់...")
+
+    for u_id in users:
+        try:
+            bot.send_message(u_id, f"📢 **សារប្រកាសពី Admin ៖**\n\n{msg_to_send}", parse_mode="Markdown")
+            success_count += 1
+        except Exception:
+            fail_count += 1
+
+    report = (
+        f"✅ **ការផ្សព្វផ្សាយរៀបរយ!**\n\n"
+        f"🎯 **ផ្ញើជោគជ័យ ៖** `{success_count} នាក់`\n"
+        f"❌ **បរាជ័យ (Block Bot) ៖** `{fail_count} នាក់`"
+    )
+    bot.edit_message_text(report, message.chat.id, status_msg.message_id, parse_mode="Markdown")
+
+# --- Command /stats ---
 @bot.message_handler(commands=['stats'])
 def show_admin_stats(message):
     record_user(message.from_user.id)
@@ -106,7 +141,7 @@ def show_admin_stats(message):
 
     stat_msg = (
         f"📊 **របាយការណ៍ស្ថិតិ Bot (Admin Only)** 📊\n\n"
-        f"👥 **អ្នកប្រើប្រាស់សរុប (Unique Users) ៖** `{total_users_count} នាក់`\n"
+        f"👥 **អ្នកប្រើប្រាស់សរុប ៖** `{total_users_count} នាក់`\n"
         f"🖼 **រូបភាព Uploaded ថ្ងៃនេះ ៖** `{photos_today} រូប`\n"
         f"📄 **PDF បង្កើតបានថ្ងៃនេះ ៖** `{pdfs_today} ឯកសារ`\n"
         f"📅 **កាលបរិច្ឆេទ ៖** `{bot_stats['last_date']}`"
@@ -129,7 +164,6 @@ def get_quality_keyboard(user_id):
     q50  = InlineKeyboardButton("📦 50%", callback_data="make_50")
     q20  = InlineKeyboardButton("🪶 20%", callback_data="make_20")
     
-    # បង្ហាញ 상태 Password
     pass_status = "🔒 កំណត់ Pass: " + ("✅ មាន" if user_passwords.get(user_id) else "❌ គ្មាន")
     btn_pass = InlineKeyboardButton(pass_status, callback_data="set_password")
     
@@ -156,7 +190,7 @@ def send_welcome(message):
     )
     bot.reply_to(message, welcome_text, reply_markup=get_donate_keyboard(), parse_mode="Markdown")
 
-# --- 📩 មុខងារ Feedback / Contact Admin ---
+# --- Feedback & Reply System ---
 @bot.callback_query_handler(func=lambda call: call.data == 'send_feedback')
 def prompt_feedback(call):
     user_id = call.from_user.id
@@ -168,14 +202,22 @@ def prompt_feedback(call):
         parse_mode="Markdown"
     )
 
-# --- 🔒 មុខងារ Set Password ---
+@bot.callback_query_handler(func=lambda call: call.data.startswith('reply_to_'))
+def handle_reply_button(call):
+    if call.from_user.id != ADMIN_ID:
+        return
+    target_user_id = int(call.data.split('_')[2])
+    admin_reply_target[ADMIN_ID] = target_user_id
+    bot.answer_callback_query(call.id)
+    bot.send_message(ADMIN_ID, f"✍️ **សូមវាយសារដែលចង់ Reply ទៅកាន់ User ID (`{target_user_id}`) ៖**", parse_mode="Markdown")
+
+# --- Password Setup ---
 @bot.callback_query_handler(func=lambda call: call.data == 'set_password')
 def prompt_password(call):
     user_id = call.from_user.id
     bot.answer_callback_query(call.id)
     
     if user_passwords.get(user_id):
-        # ប្រសិនបើមាន Password រួច ចុចដើម្បីដោះចេញវិញ
         del user_passwords[user_id]
         bot.send_message(call.message.chat.id, "🔓 **បានលុប Password ចោលវិញរួចរាល់!**", parse_mode="Markdown")
         send_or_update_prompt(call.message.chat.id, user_id)
@@ -203,7 +245,7 @@ def handle_donate_selection(call):
     except Exception:
         bot.send_message(call.message.chat.id, payment_info, parse_mode="Markdown")
 
-# --- បង្កើត PDF + Encrypt Password ករណីមាន ---
+# --- PDF Generator ---
 @bot.callback_query_handler(func=lambda call: call.data.startswith('make_'))
 def handle_make_pdf(call):
     user_id = call.from_user.id
@@ -233,7 +275,6 @@ def handle_make_pdf(call):
         )
         pdf_bytes.seek(0)
 
-        # 🔒 ប្រសិនបើ User បានកំណត់ Password
         user_pwd = user_passwords.get(user_id)
         if user_pwd:
             reader = PdfReader(pdf_bytes)
@@ -263,7 +304,6 @@ def handle_make_pdf(call):
             parse_mode="Markdown"
         )
         
-        # 🧹 សម្អាត Memory
         del user_sessions[user_id]
         if user_id in user_filenames: del user_filenames[user_id]
         if user_id in user_prompt_msg: del user_prompt_msg[user_id]
@@ -322,17 +362,31 @@ def send_or_update_prompt(chat_id, user_id):
         msg = bot.send_message(chat_id, msg_text, reply_markup=get_quality_keyboard(user_id), parse_mode="HTML")
         user_prompt_msg[user_id] = msg.message_id
 
-# --- ចាប់យករាល់ការវាយអត្ថបទ (Text Messages) សម្រាប់ Feedback និង Password ---
+# --- Text Handler ---
 @bot.message_handler(func=lambda message: True, content_types=['text'])
 def handle_text_inputs(message):
     user_id = message.from_user.id
     text = message.text.strip()
 
-    # 1️⃣ ករណី User កំពុងផ្ញើ Feedback មក Admin
+    # 1️⃣ Admin កំពុង Reply សារទៅកាន់ User ជាក់លាក់
+    if user_id == ADMIN_ID and ADMIN_ID in admin_reply_target:
+        target_id = admin_reply_target.pop(ADMIN_ID)
+        try:
+            reply_text = f"💬 **សារឆ្លើយតបពី Admin ៖**\n\n{text}"
+            bot.send_message(target_id, reply_text, parse_mode="Markdown")
+            bot.reply_to(message, f"✅ បានផ្ញើសារទៅកាន់ User (`{target_id}`) រួចរាល់!", parse_mode="Markdown")
+        except Exception:
+            bot.reply_to(message, "❌ មិនអាចផ្ញើសារទៅកាន់ User នេះបានទេ (អាចមកពីគេ Block Bot)!")
+        return
+
+    # 2️⃣ User ផ្ញើ Feedback មក Admin
     if user_id in user_awaiting_feedback:
         user_awaiting_feedback.remove(user_id)
         
-        # ផ្ញើសាររាយការណ៍ទៅកាន់ Admin ផ្ទាល់
+        reply_markup = InlineKeyboardMarkup()
+        btn_reply = InlineKeyboardButton("💬 Reply សារនេះ", callback_data=f"reply_to_{user_id}")
+        reply_markup.add(btn_reply)
+
         fb_msg = (
             f"📩 **សារថ្មីទទួលបានពី User!**\n\n"
             f"👤 **ឈ្មោះ ៖** {message.from_user.first_name}\n"
@@ -340,13 +394,13 @@ def handle_text_inputs(message):
             f"💬 **អត្ថបទ ៖**\n{text}"
         )
         try:
-            bot.send_message(ADMIN_ID, fb_msg, parse_mode="Markdown")
+            bot.send_message(ADMIN_ID, fb_msg, reply_markup=reply_markup, parse_mode="Markdown")
             bot.reply_to(message, "✅ **សាររបស់អ្នកត្រូវបានបញ្ជូនទៅកាន់ Admin រួចរាល់! សូមអរគុណ!**", parse_mode="Markdown")
-        except Exception as e:
+        except Exception:
             bot.reply_to(message, "❌ មិនអាចបញ្ជូនសារបានឡើយ!")
         return
 
-    # 2️⃣ ករណី User កំពុងវាយ Password
+    # 3️⃣ User កំពុងវាយ Password
     if user_id in user_awaiting_pass:
         user_awaiting_pass.remove(user_id)
         user_passwords[user_id] = text
@@ -355,7 +409,6 @@ def handle_text_inputs(message):
             send_or_update_prompt(message.chat.id, user_id)
         return
 
-    # ករណី Command ផ្សេងៗ
     if text.startswith('/'):
         return
 
