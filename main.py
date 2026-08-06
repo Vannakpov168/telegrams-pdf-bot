@@ -6,6 +6,7 @@ import os
 import json
 import re
 import threading
+import gc  # សម្រាប់ជួយ Garbage Collection សម្អាត RAM
 from datetime import date
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
@@ -39,7 +40,7 @@ user_filenames = {}  # រក្សាឈ្មោះ File
 user_prompt_msg = {} # រក្សា Message ID របស់ប៊ូតុងជម្រើស
 user_timers = {}     # រក្សា Timer
 
-# --- ៣. ប្រព័ន្ធគ្រប់គ្រងស្ថិតិ (ច្បាស់លាស់ ១០០%) ---
+# --- ៣. ប្រព័ន្ធគ្រប់គ្រងស្ថិតិ ---
 STATS_FILE = 'bot_stats.json'
 
 def load_stats():
@@ -47,7 +48,6 @@ def load_stats():
         try:
             with open(STATS_FILE, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-                # ធានាថា total_users គ្មាន ID ស្ទួន
                 data["total_users"] = list(set(data.get("total_users", [])))
                 if "pdfs_today" not in data: data["pdfs_today"] = 0
                 if "photos_today" not in data: data["photos_today"] = 0
@@ -76,20 +76,18 @@ def check_new_day():
 
 def record_user(user_id):
     check_new_day()
-    # ប្រើ Set Logic ដើម្បីការពារការរាប់ស្ទួន User តែមួយ
     current_users = set(bot_stats["total_users"])
     if user_id not in current_users:
         current_users.add(user_id)
         bot_stats["total_users"] = list(current_users)
         save_stats()
 
-# --- 🛠️ អនុគមន៍សម្អាតឈ្មោះ File (ស្គាល់អក្សរខ្មែរច្បាស់ ១០០%) ---
 def sanitize_filename(filename):
     cleaned = re.sub(r'[^\w\s\u1780-\u17FF-]', '', filename).strip()
     cleaned = cleaned.replace('_', ' ')
     return cleaned if cleaned else "Combined_Document"
 
-# --- Command /stats សម្រាប់ Admin តែប៉ុណ្ណោះ ---
+# --- Command /stats សម្រាប់ Admin ---
 @bot.message_handler(commands=['stats'])
 def show_admin_stats(message):
     record_user(message.from_user.id)
@@ -98,7 +96,6 @@ def show_admin_stats(message):
         return
 
     check_new_day()
-    # រាប់ចំនួន User ដែល unique
     total_users_count = len(set(bot_stats["total_users"]))
     pdfs_today = bot_stats["pdfs_today"]
     photos_today = bot_stats["photos_today"]
@@ -112,7 +109,7 @@ def show_admin_stats(message):
     )
     bot.reply_to(message, stat_msg, parse_mode="Markdown")
 
-# --- ប៊ូតុង និង Keyboard ---
+# --- Keyboards ---
 def get_donate_keyboard():
     markup = InlineKeyboardMarkup()
     btn_donate = InlineKeyboardButton("☕️ ឧបត្ថម្ភថ្លៃកាហ្វេ / Donate ☕️", callback_data="show_donate")
@@ -121,15 +118,12 @@ def get_donate_keyboard():
 
 def get_quality_keyboard():
     markup = InlineKeyboardMarkup(row_width=2)
-    
     q100 = InlineKeyboardButton("✨ 100% (ច្បាស់)", callback_data="make_100")
     q75  = InlineKeyboardButton("⚡️ 75% (មធ្យម)", callback_data="make_75")
     q50  = InlineKeyboardButton("📦 50% (ល្មម)", callback_data="make_50")
     q20  = InlineKeyboardButton("🪶 20% (ស្រាល)", callback_data="make_20")
-    
     btn_cancel = InlineKeyboardButton("❌ បោះបង់", callback_data="cancel_combine")
     btn_donate = InlineKeyboardButton("☕️ ឧបត្ថម្ភ Admin", callback_data="show_donate")
-    
     markup.add(q100, q75)
     markup.add(q50, q20)
     markup.add(btn_cancel)
@@ -170,7 +164,7 @@ def handle_donate_selection(call):
     except Exception:
         bot.send_message(call.message.chat.id, payment_info, parse_mode="Markdown")
 
-# --- បង្កើត PDF ភ្លាមៗពេលចុច Quality ---
+# --- បង្កើត PDF (Memory Optimized) ---
 @bot.callback_query_handler(func=lambda call: call.data.startswith('make_'))
 def handle_make_pdf(call):
     user_id = call.from_user.id
@@ -190,6 +184,7 @@ def handle_make_pdf(call):
     
     try:
         pdf_bytes = io.BytesIO()
+        # Save ប្រើ Memory តិច
         images[0].save(
             pdf_bytes, 
             format='PDF', 
@@ -214,14 +209,14 @@ def handle_make_pdf(call):
             caption=caption_msg
         )
         
-        # Clear Memory
+        # 🧹 សម្អាត Memory (RAM) ភ្លាមៗ
         del user_sessions[user_id]
         if user_id in user_filenames: del user_filenames[user_id]
         if user_id in user_prompt_msg: del user_prompt_msg[user_id]
+        gc.collect() # បង្ខំឱ្យ Python លុប Trash Memory
 
         bot.delete_message(call.message.chat.id, call.message.message_id)
 
-        # 📊 កត់ត្រាចំនួន PDF ដែលបានបង្កើត
         check_new_day()
         bot_stats["pdfs_today"] += 1
         save_stats()
@@ -229,7 +224,6 @@ def handle_make_pdf(call):
     except Exception as e:
         bot.send_message(call.message.chat.id, f"មានបញ្ហា ៖ {e}")
 
-# --- ប៊ូតុងបោះបង់ ---
 @bot.callback_query_handler(func=lambda call: call.data == 'cancel_combine')
 def handle_cancel(call):
     user_id = call.from_user.id
@@ -237,11 +231,11 @@ def handle_cancel(call):
     if user_id in user_sessions: del user_sessions[user_id]
     if user_id in user_filenames: del user_filenames[user_id]
     if user_id in user_prompt_msg: del user_prompt_msg[user_id]
+    gc.collect()
     
     bot.answer_callback_query(call.id, "បានបោះបង់!")
     bot.edit_message_text("❌ បានបោះបង់ការបង្កើត PDF!", call.message.chat.id, call.message.message_id)
 
-# --- ផ្ញើ ឬ Update សារតែ ១ ប៉ុណ្ណោះ ---
 def send_or_update_prompt(chat_id, user_id):
     if user_id in user_sessions and user_sessions[user_id]:
         count = len(user_sessions[user_id])
@@ -274,10 +268,11 @@ def send_or_update_prompt(chat_id, user_id):
 def handle_photo_or_document(message):
     user_id = message.from_user.id
     chat_id = message.chat.id
-    record_user(user_id) # 👈 រាប់ជា 1 User ប៉ុណ្ណោះ ទោះផ្ញើប៉ុន្មានរូបក៏ដោយ
+    record_user(user_id)
 
     file_id = None
     if message.photo:
+        # ទាញយករូបភាពទំហំសមរម្យដើម្បីការពារ RAM Overload
         file_id = message.photo[-1].file_id
     elif message.document:
         mime = message.document.mime_type or ""
@@ -303,26 +298,27 @@ def handle_photo_or_document(message):
         if image.mode in ("RGBA", "P"):
             image = image.convert("RGB")
 
-        image.thumbnail((1280, 1280), Image.Resampling.LANCZOS)
+        # ⚡️ បង្រួមទំហំមកត្រឹម 1024px ដើម្បីសន្សំ RAM មិនឱ្យកើនស៊ុយ
+        image.thumbnail((1024, 1024), Image.Resampling.BILINEAR)
 
         if user_id not in user_sessions:
             user_sessions[user_id] = []
         
         user_sessions[user_id].append(image)
 
-        # 📊 រាប់ចំនួនរូបភាព Uploaded ថ្ងៃនេះ (+1 តាមចំនួនរូបភាពពិត)
         bot_stats["photos_today"] = bot_stats.get("photos_today", 0) + 1
         save_stats()
 
         if user_id in user_timers:
             user_timers[user_id].cancel()
 
-        t = threading.Timer(2.5, send_or_update_prompt, args=[chat_id, user_id])
+        t = threading.Timer(2.0, send_or_update_prompt, args=[chat_id, user_id])
         user_timers[user_id] = t
         t.start()
 
     except Exception as e:
-        bot.reply_to(message, f"មានបញ្ហា ៖ {e}")
+        print(f"Error handling image: {e}")
+        bot.reply_to(message, "❌ មានបញ្ហាក្នុងការទាញយករូបភាព! សូមសាកល្បងផ្ញើម្តងទៀត។")
 
 print("Bot កំពុងដំណើរការ...")
 bot.infinity_polling()
